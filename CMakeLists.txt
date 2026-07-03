@@ -78,3 +78,15 @@ target_link_libraries(KineticGranular PRIVATE
     juce::juce_dsp)
 target_compile_definitions(KineticGranular PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+
+# Portable C core test harness
+add_executable(test_core tests/test_core.c tests/wav_fixture.c)
+target_link_libraries(test_core PRIVATE granular_core)
+target_include_directories(test_core PRIVATE tests)
+# CMAKE_BUILD_TYPE=Release defines NDEBUG, which would strip the assert()
+# calls the test relies on (turning the test into a silent no-op / crash on
+# uninitialized data). Force asserts active for this target regardless of
+# build type so the test harness actually exercises the code under test.
+target_compile_options(test_core PRIVATE -UNDEBUG)
+enable_testing()
+add_test(NAME core COMMAND test_core)
