@@ -2,6 +2,8 @@
 #include "wav_fixture.h"
 #include "window.h"
 #include "grain.h"
+#include "voice.h"
+#include "params.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -88,6 +90,37 @@ static void test_grain_length_and_taper(void){
     printf("test_grain OK\n");
 }
 
+static Params default_params(void){
+    Params p={0}; p.density=30; p.grain_ms=120; p.position=0.5f; p.spread=0.f;
+    p.pan_spread=0.f; p.pitch_mult=1.0f; p.macro_speed=0.f;
+    p.attack=0.01f; p.decay=0.1f; p.sustain=0.8f; p.release=0.2f; p.master_gain=1.0f;
+    return p;
+}
+
+static void test_voice_sounds_then_silences(void){
+    window_init();
+    WavData smp; smp.num_frames=44100; smp.num_channels=1; smp.sample_rate=44100;
+    static float buf[44100]; for(int i=0;i<44100;i++) buf[i]=0.5f; smp.data=buf;
+    Params p=default_params(); unsigned rng=1;
+    Voice v={0}; voice_note_on(&v,60,1.0f);
+    double sr=44100; int n=512; float l[512],r[512];
+    /* render ~0.5s, expect audible energy */
+    float energy=0;
+    for(int b=0;b<40;b++){ for(int i=0;i<n;i++){l[i]=0;r[i]=0;}
+        voice_render(&v,&smp,&p,sr,l,r,n,&rng);
+        for(int i=0;i<n;i++) energy+=l[i]*l[i]; }
+    assert(energy>1.0f);
+    /* note off, render past release, expect near-silence at the end */
+    voice_note_off(&v);
+    float tail=0;
+    for(int b=0;b<60;b++){ for(int i=0;i<n;i++){l[i]=0;r[i]=0;}
+        voice_render(&v,&smp,&p,sr,l,r,n,&rng);
+        if(b>=50) for(int i=0;i<n;i++) tail+=l[i]*l[i]; }
+    assert(tail<0.01f);
+    assert(voice_is_finished(&v));
+    printf("test_voice OK\n");
+}
+
 int main(void){
     test_wav_load();
     test_wav_load_24();
@@ -95,6 +128,7 @@ int main(void){
     test_wav_load_malformed_truncated();
     test_window();
     test_grain_length_and_taper();
+    test_voice_sounds_then_silences();
     printf("ALL CORE TESTS PASSED\n");
     return 0;
 }
