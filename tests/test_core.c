@@ -4,6 +4,7 @@
 #include "grain.h"
 #include "voice.h"
 #include "params.h"
+#include "granular_engine.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -184,6 +185,24 @@ static void test_voice_release_small_sustain_near_peak(void){
     printf("test_voice_release_small_sustain_near_peak OK\n");
 }
 
+static void test_engine_polyphony_and_stealing(void){
+    GranularEngine* e=ge_create(44100,16);
+    static float buf[44100]; for(int i=0;i<44100;i++) buf[i]=0.5f;
+    ge_set_sample(e,buf,44100,1,44100);
+    ge_set_param(e,P_ATTACK,0.5f); ge_set_param(e,P_RELEASE,0.5f);
+    for(int nnote=60;nnote<63;nnote++) ge_note_on(e,nnote,1.0f);
+    float l[256],r[256]; for(int i=0;i<256;i++){l[i]=0;r[i]=0;}
+    ge_render(e,l,r,256);
+    assert(ge_active_voice_count(e)==3);
+    /* fill to 16, then a 17th steals -> stays at 16 */
+    for(int nnote=63;nnote<76;nnote++) ge_note_on(e,nnote,1.0f);
+    assert(ge_active_voice_count(e)==16);
+    ge_note_on(e,90,1.0f);
+    assert(ge_active_voice_count(e)==16);
+    ge_destroy(e);
+    printf("test_engine OK\n");
+}
+
 int main(void){
     test_wav_load();
     test_wav_load_24();
@@ -194,6 +213,7 @@ int main(void){
     test_voice_sounds_then_silences();
     test_voice_release_sustain_zero_during_attack();
     test_voice_release_small_sustain_near_peak();
+    test_engine_polyphony_and_stealing();
     printf("ALL CORE TESTS PASSED\n");
     return 0;
 }
