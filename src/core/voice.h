@@ -12,6 +12,7 @@ typedef struct {
     /* ADSR */
     int stage; /* 0 idle,1 A,2 D,3 S,4 R */
     float env; float velocity;
+    float release_start_env; /* env captured at moment release begins */
     unsigned age_samples; /* for stealing (oldest = largest) */
 } Voice;
 

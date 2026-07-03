@@ -121,6 +121,69 @@ static void test_voice_sounds_then_silences(void){
     printf("test_voice OK\n");
 }
 
+/* Regression: sustain=0 + note-off during attack must still terminate the
+ * voice within ~release seconds. Before the fix, adsr_tick's release step
+ * was s/(r*sr) with s re-read from p->sustain; with sustain==0 that step is
+ * 0, so env freezes and the voice never becomes finished (zombie voice). */
+static void test_voice_release_sustain_zero_during_attack(void){
+    window_init();
+    WavData smp; smp.num_frames=44100; smp.num_channels=1; smp.sample_rate=44100;
+    static float buf[44100]; for(int i=0;i<44100;i++) buf[i]=0.5f; smp.data=buf;
+    Params p=default_params();
+    p.attack=0.05f; p.decay=0.1f; p.sustain=0.f; p.release=0.1f;
+    unsigned rng=1;
+    Voice v={0}; voice_note_on(&v,60,1.0f);
+    double sr=44100; int n=512; float l[512],r[512];
+    /* render a couple blocks: well within the 0.05s (~2205 sample) attack */
+    for(int b=0;b<2;b++){ for(int i=0;i<n;i++){l[i]=0;r[i]=0;}
+        voice_render(&v,&smp,&p,sr,l,r,n,&rng); }
+    assert(v.stage==1); /* still attacking, env>0 */
+    assert(v.env>0.0001f);
+    voice_note_off(&v);
+    assert(v.stage==4); /* now releasing */
+    /* bounded wait: release is 0.1s (~4410 samples) -> generous margin */
+    int release_samples=(int)(p.release*sr+0.5);
+    int max_blocks=(release_samples/n)+5;
+    int finished=0;
+    for(int b=0;b<max_blocks && !finished;b++){ for(int i=0;i<n;i++){l[i]=0;r[i]=0;}
+        voice_render(&v,&smp,&p,sr,l,r,n,&rng);
+        if(voice_is_finished(&v)) finished=1; }
+    assert(finished); /* zombie voice bug: this fails (never finishes) pre-fix */
+    printf("test_voice_release_sustain_zero_during_attack OK\n");
+}
+
+/* Regression: small sustain (e.g. 0.001) + note-off near attack peak must
+ * still terminate in roughly `release` seconds, not ~1/sustain times longer.
+ * Before the fix, step = s/(r*sr) is computed from the tiny sustain value
+ * even though env is near 1.0 at release onset, so it takes ~1/s times the
+ * configured release duration (~1000x slower here). */
+static void test_voice_release_small_sustain_near_peak(void){
+    window_init();
+    WavData smp; smp.num_frames=44100; smp.num_channels=1; smp.sample_rate=44100;
+    static float buf[44100]; for(int i=0;i<44100;i++) buf[i]=0.5f; smp.data=buf;
+    Params p=default_params();
+    p.attack=0.05f; p.decay=0.1f; p.sustain=0.001f; p.release=0.1f;
+    unsigned rng=1;
+    Voice v={0}; voice_note_on(&v,60,1.0f);
+    double sr=44100; int n=512; float l[512],r[512];
+    /* render most (but not all) of the ~2205-sample attack: env near peak */
+    for(int b=0;b<4;b++){ for(int i=0;i<n;i++){l[i]=0;r[i]=0;}
+        voice_render(&v,&smp,&p,sr,l,r,n,&rng); }
+    assert(v.stage==1); /* still attacking, near peak */
+    assert(v.env>0.5f);
+    voice_note_off(&v);
+    assert(v.stage==4);
+    /* bounded wait: allow a generous 2x release-seconds margin */
+    int release_samples=(int)(2.0*p.release*sr+0.5);
+    int max_blocks=(release_samples/n)+5;
+    int finished=0;
+    for(int b=0;b<max_blocks && !finished;b++){ for(int i=0;i<n;i++){l[i]=0;r[i]=0;}
+        voice_render(&v,&smp,&p,sr,l,r,n,&rng);
+        if(voice_is_finished(&v)) finished=1; }
+    assert(finished); /* ~200s-release bug: this fails (times out) pre-fix */
+    printf("test_voice_release_small_sustain_near_peak OK\n");
+}
+
 int main(void){
     test_wav_load();
     test_wav_load_24();
@@ -129,6 +192,8 @@ int main(void){
     test_window();
     test_grain_length_and_taper();
     test_voice_sounds_then_silences();
+    test_voice_release_sustain_zero_during_attack();
+    test_voice_release_small_sustain_near_peak();
     printf("ALL CORE TESTS PASSED\n");
     return 0;
 }

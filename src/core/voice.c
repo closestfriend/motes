@@ -8,10 +8,10 @@ static float frand(unsigned* s){ *s=*s*1664525u+1013904223u; return ((*s>>8)&0xF
 void voice_note_on(Voice* v, int note, float velocity){
     v->active=1; v->note=note; v->note_pitch=powf(2.0f,(note-60)/12.0f);
     v->position=0.0; v->grain_phase_acc=0.0; v->velocity=velocity;
-    v->stage=1; v->env=0.0f; v->age_samples=0;
+    v->stage=1; v->env=0.0f; v->age_samples=0; v->release_start_env=0.0f;
     for(int i=0;i<VOICE_MAX_GRAINS;i++) v->grains[i].active=0;
 }
-void voice_note_off(Voice* v){ if(v->active && v->stage!=0) v->stage=4; }
+void voice_note_off(Voice* v){ if(v->active && v->stage!=0 && v->stage!=4){ v->release_start_env=v->env; v->stage=4; } }
 int voice_is_finished(const Voice* v){ return !v->active; }
 
 static float adsr_tick(Voice* v, const Params* p, double sr){
@@ -21,7 +21,12 @@ static float adsr_tick(Voice* v, const Params* p, double sr){
         case 1: step=(a<=0)?1.f:(1.0f/(a*sr)); v->env+=step; if(v->env>=1.f){v->env=1.f;v->stage=2;} break;
         case 2: step=(d<=0)?1.f:((1.0f-s)/(d*sr)); v->env-=step; if(v->env<=s){v->env=s;v->stage=3;} break;
         case 3: v->env=s; break;
-        case 4: step=(r<=0)?1.f:(s/(r*sr)); v->env-=step; if(v->env<=0.0001f){v->env=0.f;v->stage=0;v->active=0;} break;
+        /* Linear ramp from the envelope level captured at release onset
+         * (release_start_env) down to 0 in exactly `r` seconds. Using the
+         * live env-at-release-time (rather than re-reading p->sustain every
+         * tick) means this terminates correctly for ANY sustain value,
+         * including 0, and from ANY stage the release began in. */
+        case 4: step=(r<=0)?1.f:(v->release_start_env/(r*sr)); v->env-=step; if(v->env<=0.0001f){v->env=0.f;v->stage=0;v->active=0;} break;
         default: v->env=0.f;
     }
     return v->env;
