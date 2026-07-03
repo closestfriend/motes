@@ -19,12 +19,23 @@ int wav_load(const char* path, WavData* out){
     unsigned fmt=0,ch=0,sr=0,bits=0; long off=12; long dataOff=-1,dataLen=0;
     while(off+8<=sz){
         const unsigned char* id=buf+off; unsigned clen=rd32(buf+off+4); long body=off+8;
+        /* Reject any chunk whose declared length would read past the actual
+         * file size -- a header-declared length is untrusted input and must
+         * never be used to index past the buffer we actually read. */
+        if(clen > (unsigned long)(sz - body)){ free(buf); return -8; }
         if(!memcmp(id,"fmt ",4)){
+            if(clen<16){ free(buf); return -9; }
             fmt=rd16(buf+body); ch=rd16(buf+body+2); sr=rd32(buf+body+4); bits=rd16(buf+body+14);
         } else if(!memcmp(id,"data",4)){ dataOff=body; dataLen=clen; }
         off = body + clen + (clen&1);
     }
     if(dataOff<0||ch==0){ free(buf); return -6; }
+    /* dataOff+dataLen <= sz is already guaranteed by the chunk-bounds check
+     * above (every chunk, including "data", was validated against sz). */
+
+    if(!(bits==8||bits==16||bits==24||bits==32)){ free(buf); return -10; }
+    int supported = (fmt==1 && (bits==8||bits==16||bits==24)) || (fmt==3 && bits==32);
+    if(!supported){ free(buf); return -11; }
 
     int bytes=bits/8; int frames=dataLen/(bytes*ch);
     float* data=(float*)malloc(sizeof(float)*frames*ch);
