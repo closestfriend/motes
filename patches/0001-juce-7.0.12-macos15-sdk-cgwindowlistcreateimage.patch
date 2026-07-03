@@ -1,0 +1,47 @@
+From 2f9fb8871e487d447afd1f498bf63ed9ae59f95f Mon Sep 17 00:00:00 2001
+From: Hunter <hnkarman@gmail.com>
+Date: Thu, 2 Jul 2026 21:08:12 -0700
+Subject: [PATCH] fix(macos-sdk): guard obsoleted CGWindowListCreateImage on
+ macOS 15+ SDKs
+
+Local patch, not upstream. CGWindowListCreateImage is fully obsoleted
+(hard compile error) as of the macOS 15.0 SDK; this JUCE 7.0.12 tag
+predates that annotation. Window-snapshot utility is unused by
+Kinetic Granular; fall back to an empty Image on SDK 15.0+ instead of
+patching in a ScreenCaptureKit replacement.
+---
+ modules/juce_gui_basics/native/juce_Windowing_mac.mm | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/modules/juce_gui_basics/native/juce_Windowing_mac.mm b/modules/juce_gui_basics/native/juce_Windowing_mac.mm
+index ad459d483e..c8b28b875b 100644
+--- a/modules/juce_gui_basics/native/juce_Windowing_mac.mm
++++ b/modules/juce_gui_basics/native/juce_Windowing_mac.mm
+@@ -524,6 +524,16 @@ static Image createNSWindowSnapshot (NSWindow* nsWindow)
+         // that framework is only available from macOS 12.3 onwards.
+         // A suitable @available check should be added once the minimum build OS is 12.3 or greater,
+         // so that ScreenCaptureKit can be weak-linked.
++        //
++        // KGRN PATCH (task 1, 2026-07): CGWindowListCreateImage is fully obsoleted (hard
++        // compile error, not just deprecated) as of the macOS 15.0 SDK. This code path is only
++        // used for window-snapshot utilities (e.g. drag images) that Kinetic Granular does not
++        // exercise, so on SDKs where the symbol is obsoleted we skip the call and return an
++        // empty Image rather than patching in a ScreenCaptureKit replacement. Pinned JUCE tag
++        // (7.0.12) predates macOS 15 SDK availability annotations upstream.
++       #if defined (MAC_OS_VERSION_15_0) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_VERSION_15_0
++        return Image();
++       #else
+        #if defined (MAC_OS_VERSION_14_0) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_VERSION_14_0
+         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+         #define JUCE_DEPRECATION_IGNORED 1
+@@ -551,6 +561,7 @@ static Image createNSWindowSnapshot (NSWindow* nsWindow)
+         CGImageRelease (screenShot);
+ 
+         return result;
++       #endif
+     }
+ }
+ 
+-- 
+2.50.1 (Apple Git-155)
+
