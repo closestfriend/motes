@@ -83,8 +83,18 @@ bool KineticGranularProcessor::loadWavFile(const juce::File& f){
     int ch=tmp.getNumChannels(), n=tmp.getNumSamples();
     std::vector<float> inter((size_t)n*ch);
     for(int i=0;i<n;i++) for(int c=0;c<ch;c++) inter[(size_t)i*ch+c]=tmp.getSample(c,i);
-    ge_set_sample(engine, inter.data(), n, ch, rd->sampleRate);
-    f.loadFileAsData(currentSampleWav);   // keep raw bytes for presets
+    // Decode is done above with no lock held. Only the fast buffer swap needs
+    // to be serialized against processBlock: this path is also reachable from
+    // the editor's "Load WAV" button on the message thread with the audio
+    // callback running concurrently (unlike state-load, where the host has
+    // suspended processing). Without this lock, grains already spawned in a
+    // live callback could keep a raw pointer into the buffer ge_set_sample is
+    // about to free -- a use-after-free on the next grain_tick.
+    {
+        const juce::ScopedLock sl(getCallbackLock());
+        ge_set_sample(engine, inter.data(), n, ch, rd->sampleRate);
+        f.loadFileAsData(currentSampleWav);   // keep raw bytes for presets
+    }
     return true;
 }
 

@@ -34,6 +34,17 @@ void ge_destroy(GranularEngine* e){ if(!e)return; wav_free(&e->sample); free(e->
 void ge_prepare(GranularEngine* e, double sr){ e->sr=sr; }
 
 void ge_set_sample(GranularEngine* e, const float* interleaved, int frames, int ch, double src_rate){
+    /* Reached both from state-load (host suspended) and the editor's "Load
+     * WAV" button on the message thread with NO suspension. Every spawned
+     * Grain holds a raw pointer (g->src) into the CURRENT e->sample buffer.
+     * Hard-reset all voices/grains before we free/replace that buffer so no
+     * grain can dereference freed memory on the next audio callback. This
+     * stops currently-sounding notes on sample load -- expected, and safe. */
+    for(int i=0;i<e->max_voices;i++){
+        Voice* v=&e->voices[i];
+        v->active=0; v->stage=0;
+        for(int gi=0;gi<VOICE_MAX_GRAINS;gi++) v->grains[gi].active=0;
+    }
     float* copy=(float*)malloc(sizeof(float)*frames*ch);
     memcpy(copy,interleaved,sizeof(float)*frames*ch);
     WavData old=e->sample;

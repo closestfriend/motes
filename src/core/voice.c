@@ -7,7 +7,7 @@ static float frand(unsigned* s){ *s=*s*1664525u+1013904223u; return ((*s>>8)&0xF
 
 void voice_note_on(Voice* v, int note, float velocity){
     v->active=1; v->note=note; v->note_pitch=powf(2.0f,(note-60)/12.0f);
-    v->position=0.0; v->grain_phase_acc=0.0; v->velocity=velocity;
+    v->drift=0.0; v->grain_phase_acc=0.0; v->velocity=velocity;
     v->stage=1; v->env=0.0f; v->age_samples=0; v->release_start_env=0.0f;
     for(int i=0;i<VOICE_MAX_GRAINS;i++) v->grains[i].active=0;
 }
@@ -37,7 +37,7 @@ static void spawn_grain(Voice* v, const WavData* smp, const Params* p, unsigned*
         if(!v->grains[i].active){
             Grain* g=&v->grains[i];
             float spray=(frand(rng)-0.5f)*p->spread;
-            double pos=v->position+spray; if(pos<0)pos=0; if(pos>1)pos=1;
+            double pos=p->position+v->drift+spray; if(pos<0)pos=0; if(pos>1)pos=1;
             g->src=smp->data; g->src_frames=smp->num_frames; g->src_channels=smp->num_channels;
             g->read_pos=pos*smp->num_frames;
             g->pitch_ratio=v->note_pitch*p->pitch_mult;
@@ -59,10 +59,10 @@ void voice_render(Voice* v, const WavData* smp, const Params* p, double sr,
         /* schedule grains */
         v->grain_phase_acc+=grains_per_sample;
         while(v->grain_phase_acc>=1.0){ v->grain_phase_acc-=1.0; spawn_grain(v,smp,p,rng); }
-        /* macro drift of position playhead */
+        /* macro drift: slow offset applied on top of the live p->position base */
         if(p->macro_speed!=0.0f && smp->num_frames>0)
-            v->position+=(double)p->macro_speed/ (smp->num_frames/sr) / sr;
-        if(v->position>1.0)v->position-=1.0; if(v->position<0.0)v->position+=1.0;
+            v->drift+=(double)p->macro_speed/ (smp->num_frames/sr) / sr;
+        if(v->drift>1.0)v->drift-=1.0; if(v->drift<0.0)v->drift+=1.0;
         /* mix live grains */
         float gl=0.f, gr=0.f;
         for(int gi=0;gi<VOICE_MAX_GRAINS;gi++) if(v->grains[gi].active) grain_tick(&v->grains[gi],&gl,&gr);

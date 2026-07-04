@@ -185,6 +185,43 @@ static void test_voice_release_small_sustain_near_peak(void){
     printf("test_voice_release_small_sustain_near_peak OK\n");
 }
 
+/* Regression: the Position knob (p->position) must be the LIVE base of the
+ * grain read pointer, not just a value NObody displays. Before the fix,
+ * spawn_grain read from v->position (seeded to 0.0 and only ever moved by
+ * macro drift), so with macro_speed==0 every grain read from frame 0
+ * regardless of the Position param -- the knob was dead.
+ * Build a source where the first half is silence (0.0) and the second half
+ * is full-scale DC (1.0). position=0.05 must read the silent half (~0
+ * energy); position=0.95 must read the loud half (audible energy). */
+static void test_position_param_drives_grain_read(void){
+    window_init();
+    WavData smp; smp.num_frames=44100; smp.num_channels=1; smp.sample_rate=44100;
+    static float buf[44100];
+    for(int i=0;i<44100;i++) buf[i] = (i<22050) ? 0.0f : 1.0f;
+    smp.data=buf;
+    double sr=44100; int n=512; int nblocks=20; float l[512],r[512];
+
+    Params p_low=default_params(); p_low.spread=0.f; p_low.macro_speed=0.f; p_low.position=0.05f;
+    unsigned rng_low=1;
+    Voice v_low={0}; voice_note_on(&v_low,60,1.0f);
+    float energy_low=0;
+    for(int b=0;b<nblocks;b++){ for(int i=0;i<n;i++){l[i]=0;r[i]=0;}
+        voice_render(&v_low,&smp,&p_low,sr,l,r,n,&rng_low);
+        for(int i=0;i<n;i++) energy_low+=l[i]*l[i]; }
+
+    Params p_hi=default_params(); p_hi.spread=0.f; p_hi.macro_speed=0.f; p_hi.position=0.95f;
+    unsigned rng_hi=1;
+    Voice v_hi={0}; voice_note_on(&v_hi,60,1.0f);
+    float energy_hi=0;
+    for(int b=0;b<nblocks;b++){ for(int i=0;i<n;i++){l[i]=0;r[i]=0;}
+        voice_render(&v_hi,&smp,&p_hi,sr,l,r,n,&rng_hi);
+        for(int i=0;i<n;i++) energy_hi+=l[i]*l[i]; }
+
+    printf("  position=0.05 energy=%f  position=0.95 energy=%f\n",energy_low,energy_hi);
+    assert(energy_hi > energy_low*10.0f + 0.01f); /* dead-Position bug: both ~equal (both read frame 0) pre-fix */
+    printf("test_position_param_drives_grain_read OK\n");
+}
+
 static void test_engine_polyphony_and_stealing(void){
     GranularEngine* e=ge_create(44100,16);
     static float buf[44100]; for(int i=0;i<44100;i++) buf[i]=0.5f;
@@ -213,6 +250,7 @@ int main(void){
     test_voice_sounds_then_silences();
     test_voice_release_sustain_zero_during_attack();
     test_voice_release_small_sustain_near_peak();
+    test_position_param_drives_grain_read();
     test_engine_polyphony_and_stealing();
     printf("ALL CORE TESTS PASSED\n");
     return 0;

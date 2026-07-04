@@ -6,7 +6,7 @@
 #define VOICE_MAX_GRAINS 64
 typedef struct {
     int active; int note; float note_pitch; /* 2^((note-60)/12) */
-    double position; /* 0..1 playhead */
+    double drift; /* 0..1-ish macro-drift OFFSET added to p->position (NOT an absolute playhead) */
     double grain_phase_acc; /* fractional grains due */
     Grain grains[VOICE_MAX_GRAINS];
     /* ADSR */
