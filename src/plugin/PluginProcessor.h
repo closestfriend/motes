@@ -1,6 +1,10 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 
+extern "C" {
+#include "granular_engine.h"
+}
+
 class KineticGranularProcessor : public juce::AudioProcessor
 {
 public:
@@ -30,5 +34,7 @@ public:
     void setStateInformation(const void*, int) override {}
 
 private:
+    GranularEngine* engine = nullptr;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(KineticGranularProcessor)
 };
