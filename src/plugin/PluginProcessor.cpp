@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <cmath>
 #include <vector>
 
@@ -72,9 +73,45 @@ void KineticGranularProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     ge_render(engine, L, R, buffer.getNumSamples());
 }
 
+void KineticGranularProcessor::loadWavFile(const juce::File& f){
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> rd(fm.createReaderFor(f));
+    if(!rd) return;
+    juce::AudioBuffer<float> tmp((int)rd->numChannels,(int)rd->lengthInSamples);
+    rd->read(&tmp,0,(int)rd->lengthInSamples,0,true,true);
+    // interleave
+    int ch=tmp.getNumChannels(), n=tmp.getNumSamples();
+    std::vector<float> inter((size_t)n*ch);
+    for(int i=0;i<n;i++) for(int c=0;c<ch;c++) inter[(size_t)i*ch+c]=tmp.getSample(c,i);
+    ge_set_sample(engine, inter.data(), n, ch, rd->sampleRate);
+    f.loadFileAsData(currentSampleWav);   // keep raw bytes for presets
+}
+
+void KineticGranularProcessor::getStateInformation(juce::MemoryBlock& dest){
+    juce::MemoryOutputStream mos(dest,false);
+    auto state=apvts.copyState();
+    juce::MemoryBlock xml; { juce::MemoryOutputStream x(xml,false);
+        state.createXml()->writeTo(x); }
+    mos.writeInt((int)xml.getSize()); mos.write(xml.getData(),xml.getSize());
+    mos.writeInt((int)currentSampleWav.getSize());
+    mos.write(currentSampleWav.getData(),currentSampleWav.getSize());
+}
+
+void KineticGranularProcessor::setStateInformation(const void* data,int size){
+    juce::MemoryInputStream mis(data,(size_t)size,false);
+    int xmlLen=mis.readInt(); juce::MemoryBlock xml; xml.setSize((size_t)xmlLen);
+    mis.read(xml.getData(),xmlLen);
+    if(auto x=juce::XmlDocument::parse(xml.toString()))
+        apvts.replaceState(juce::ValueTree::fromXml(*x));
+    int wavLen=mis.readInt();
+    if(wavLen>0){ currentSampleWav.setSize((size_t)wavLen); mis.read(currentSampleWav.getData(),wavLen);
+        auto tmp=juce::File::createTempFile(".wav"); tmp.replaceWithData(currentSampleWav.getData(),currentSampleWav.getSize());
+        loadWavFile(tmp); tmp.deleteFile(); }
+}
+
 juce::AudioProcessorEditor* KineticGranularProcessor::createEditor()
 {
-    return new juce::GenericAudioProcessorEditor(*this);
+    return new KineticGranularEditor(*this);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
