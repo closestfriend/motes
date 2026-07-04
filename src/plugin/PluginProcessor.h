@@ -33,6 +33,9 @@ public:
     void getStateInformation(juce::MemoryBlock&) override {}
     void setStateInformation(const void*, int) override {}
 
+    juce::AudioProcessorValueTreeState apvts;
+    static juce::AudioProcessorValueTreeState::ParameterLayout makeLayout();
+
 private:
     GranularEngine* engine = nullptr;
 
