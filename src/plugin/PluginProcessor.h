@@ -33,7 +33,7 @@ public:
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
 
-    void loadWavFile(const juce::File& f);   // message thread only
+    bool loadWavFile(const juce::File& f);   // message thread only; false if decode fails
     juce::MemoryBlock currentSampleWav;      // raw bytes for state
 
     juce::AudioProcessorValueTreeState apvts;

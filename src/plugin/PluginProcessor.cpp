@@ -73,10 +73,10 @@ void KineticGranularProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     ge_render(engine, L, R, buffer.getNumSamples());
 }
 
-void KineticGranularProcessor::loadWavFile(const juce::File& f){
+bool KineticGranularProcessor::loadWavFile(const juce::File& f){
     juce::AudioFormatManager fm; fm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> rd(fm.createReaderFor(f));
-    if(!rd) return;
+    if(!rd) return false;
     juce::AudioBuffer<float> tmp((int)rd->numChannels,(int)rd->lengthInSamples);
     rd->read(&tmp,0,(int)rd->lengthInSamples,0,true,true);
     // interleave
@@ -85,6 +85,7 @@ void KineticGranularProcessor::loadWavFile(const juce::File& f){
     for(int i=0;i<n;i++) for(int c=0;c<ch;c++) inter[(size_t)i*ch+c]=tmp.getSample(c,i);
     ge_set_sample(engine, inter.data(), n, ch, rd->sampleRate);
     f.loadFileAsData(currentSampleWav);   // keep raw bytes for presets
+    return true;
 }
 
 void KineticGranularProcessor::getStateInformation(juce::MemoryBlock& dest){
@@ -99,14 +100,20 @@ void KineticGranularProcessor::getStateInformation(juce::MemoryBlock& dest){
 
 void KineticGranularProcessor::setStateInformation(const void* data,int size){
     juce::MemoryInputStream mis(data,(size_t)size,false);
-    int xmlLen=mis.readInt(); juce::MemoryBlock xml; xml.setSize((size_t)xmlLen);
+    int xmlLen=mis.readInt();
+    if(xmlLen<0 || (size_t)xmlLen>(size_t)mis.getNumBytesRemaining()) return; // corrupt preset: bail without applying partial state
+    juce::MemoryBlock xml; xml.setSize((size_t)xmlLen);
     mis.read(xml.getData(),xmlLen);
     if(auto x=juce::XmlDocument::parse(xml.toString()))
         apvts.replaceState(juce::ValueTree::fromXml(*x));
     int wavLen=mis.readInt();
-    if(wavLen>0){ currentSampleWav.setSize((size_t)wavLen); mis.read(currentSampleWav.getData(),wavLen);
+    if(wavLen>0){
+        if((size_t)wavLen>(size_t)mis.getNumBytesRemaining()) return; // corrupt length prefix: bail
+        currentSampleWav.setSize((size_t)wavLen); mis.read(currentSampleWav.getData(),wavLen);
         auto tmp=juce::File::createTempFile(".wav"); tmp.replaceWithData(currentSampleWav.getData(),currentSampleWav.getSize());
-        loadWavFile(tmp); tmp.deleteFile(); }
+        if(!loadWavFile(tmp)) currentSampleWav.setSize(0); // decode failed: don't claim a valid sample
+        tmp.deleteFile();
+    }
 }
 
 juce::AudioProcessorEditor* KineticGranularProcessor::createEditor()
