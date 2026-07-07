@@ -8,7 +8,7 @@ using APVTS = juce::AudioProcessorValueTreeState;
 using PF = juce::AudioParameterFloat;
 static juce::NormalisableRange<float> rng(float a,float b){ return {a,b}; }
 
-APVTS::ParameterLayout KineticGranularProcessor::makeLayout(){
+APVTS::ParameterLayout MotesProcessor::makeLayout(){
     APVTS::ParameterLayout l;
     l.add(std::make_unique<PF>("density","Density", rng(1,100), 30.f));
     l.add(std::make_unique<PF>("grain","Grain Size (ms)", rng(5,500), 120.f));
@@ -26,7 +26,7 @@ APVTS::ParameterLayout KineticGranularProcessor::makeLayout(){
     return l;
 }
 
-KineticGranularProcessor::KineticGranularProcessor()
+MotesProcessor::MotesProcessor()
   : AudioProcessor(BusesProperties().withOutput("Output",
         juce::AudioChannelSet::stereo(), true))
   , apvts(*this, nullptr, "PARAMS", makeLayout())
@@ -37,13 +37,13 @@ KineticGranularProcessor::KineticGranularProcessor()
     for (int i=0;i<N;i++) buf[(size_t)i] = 0.5f*std::sin(2.0*M_PI*220.0*i/44100.0);
     ge_set_sample(engine, buf.data(), N, 1, 44100.0);
 }
-KineticGranularProcessor::~KineticGranularProcessor() { ge_destroy(engine); }
+MotesProcessor::~MotesProcessor() { ge_destroy(engine); }
 
-void KineticGranularProcessor::prepareToPlay(double sampleRate, int) {
+void MotesProcessor::prepareToPlay(double sampleRate, int) {
     ge_prepare(engine, sampleRate);
 }
 
-void KineticGranularProcessor::processBlock(juce::AudioBuffer<float>& buffer,
+void MotesProcessor::processBlock(juce::AudioBuffer<float>& buffer,
                                             juce::MidiBuffer& midi)
 {
     auto g=[&](const char* id){ return apvts.getRawParameterValue(id)->load(); };
@@ -73,7 +73,7 @@ void KineticGranularProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     ge_render(engine, L, R, buffer.getNumSamples());
 }
 
-bool KineticGranularProcessor::loadWavFile(const juce::File& f){
+bool MotesProcessor::loadWavFile(const juce::File& f){
     juce::AudioFormatManager fm; fm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> rd(fm.createReaderFor(f));
     if(!rd) return false;
@@ -98,7 +98,7 @@ bool KineticGranularProcessor::loadWavFile(const juce::File& f){
     return true;
 }
 
-void KineticGranularProcessor::getStateInformation(juce::MemoryBlock& dest){
+void MotesProcessor::getStateInformation(juce::MemoryBlock& dest){
     juce::MemoryOutputStream mos(dest,false);
     auto state=apvts.copyState();
     juce::MemoryBlock xml; { juce::MemoryOutputStream x(xml,false);
@@ -108,7 +108,7 @@ void KineticGranularProcessor::getStateInformation(juce::MemoryBlock& dest){
     mos.write(currentSampleWav.getData(),currentSampleWav.getSize());
 }
 
-void KineticGranularProcessor::setStateInformation(const void* data,int size){
+void MotesProcessor::setStateInformation(const void* data,int size){
     juce::MemoryInputStream mis(data,(size_t)size,false);
     int xmlLen=mis.readInt();
     if(xmlLen<0 || (size_t)xmlLen>(size_t)mis.getNumBytesRemaining()) return; // corrupt preset: bail without applying partial state
@@ -126,12 +126,12 @@ void KineticGranularProcessor::setStateInformation(const void* data,int size){
     }
 }
 
-juce::AudioProcessorEditor* KineticGranularProcessor::createEditor()
+juce::AudioProcessorEditor* MotesProcessor::createEditor()
 {
-    return new KineticGranularEditor(*this);
+    return new MotesEditor(*this);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new KineticGranularProcessor();
+    return new MotesProcessor();
 }

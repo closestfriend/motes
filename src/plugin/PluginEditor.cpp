@@ -1,5 +1,5 @@
 #include "PluginEditor.h"
-KineticGranularEditor::KineticGranularEditor(KineticGranularProcessor& p)
+MotesEditor::MotesEditor(MotesProcessor& p)
   : AudioProcessorEditor(p), proc(p) {
     addAndMakeVisible(loadBtn); addAndMakeVisible(generic);
     loadBtn.onClick=[this]{
@@ -9,5 +9,5 @@ KineticGranularEditor::KineticGranularEditor(KineticGranularProcessor& p)
     };
     setSize(440,420);
 }
-void KineticGranularEditor::resized(){ auto r=getLocalBounds();
+void MotesEditor::resized(){ auto r=getLocalBounds();
     loadBtn.setBounds(r.removeFromTop(32).reduced(4)); generic.setBounds(r); }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(KineticGranular VERSION 0.1.0 LANGUAGES C CXX)
+project(Motes VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 11)
@@ -61,23 +61,23 @@ target_include_directories(granular_core PUBLIC src/core)
 target_link_libraries(granular_core PRIVATE m)
 
 # Plugin
-juce_add_plugin(KineticGranular
+juce_add_plugin(Motes
     PLUGIN_MANUFACTURER_CODE Hntr
-    PLUGIN_CODE Kgrn
+    PLUGIN_CODE Mote
     FORMATS AU VST3
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     COPY_PLUGIN_AFTER_BUILD TRUE   # auto-install AU+VST3 to ~/Library/Audio/Plug-Ins on every build (no manual copy → no stale installs)
-    PRODUCT_NAME "Kinetic Granular")
+    PRODUCT_NAME "Motes")
 
-target_sources(KineticGranular PRIVATE
+target_sources(Motes PRIVATE
     src/plugin/PluginProcessor.cpp
     src/plugin/PluginEditor.cpp)
-target_link_libraries(KineticGranular PRIVATE
+target_link_libraries(Motes PRIVATE
     granular_core
     juce::juce_audio_utils
     juce::juce_dsp)
-target_compile_definitions(KineticGranular PRIVATE
+target_compile_definitions(Motes PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
 
 # Portable C core test harness
