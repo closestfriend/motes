@@ -17,9 +17,9 @@
 - **Voice ceiling (v1):** 16 voices.
 - **Sample format (v1):** WAV only, one sample layer.
 - **Git remote:** Hunter's personal `origin` only. NEVER add/push/fetch any `Memetica-Corporation` remote.
-- **Repo root:** `~/Projects/cf audio pack/kinetic-granular-native/`.
+- **Repo root:** `~/Projects/kinetic-granular-native/` (moved out of the `cf audio pack` AI Studio bundle post-build).
 - **Build generator:** full Xcode is NOT installed on this machine (Command Line Tools only, no Ninja). Use the **Unix Makefiles** generator: configure with `cmake -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release`. Do NOT use `-G Xcode` or `xcodebuild`. Single-config generator, so `--config Release` on build commands is a harmless no-op. If AU/VST3 fails to build or validate under Makefiles + CLT, STOP and escalate (fallback is installing full Xcode).
-- **Reference spec for the sound:** `../kinetic-granular/src/lib/audio.ts`.
+- **Reference spec for the sound:** `~/Projects/cf audio pack/kinetic-granular/src/lib/audio.ts`.
 
 ---
 

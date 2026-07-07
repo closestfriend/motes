@@ -2,7 +2,7 @@
 
 **Status:** approved 2026-06-30
 **Author:** Hunter + Claude (brainstorming session)
-**Reference implementation:** `../kinetic-granular/src/lib/audio.ts` (working Web Audio granular engine — the sonic spec)
+**Reference implementation:** `~/Projects/cf audio pack/kinetic-granular/src/lib/audio.ts` (working Web Audio granular engine — the sonic spec; this native port was moved out of that AI Studio bundle to `~/Projects/kinetic-granular-native/`)
 
 ## 1. Purpose
 
@@ -120,7 +120,7 @@ void ge_render(GranularEngine*, float* left, float* right, int num_frames);
 
 ## 9. Repo & build
 
-- Location: `~/Projects/cf audio pack/kinetic-granular-native/` (sibling to the reference app; own git repo → Hunter's `origin`, never Memetica).
+- Location: `~/Projects/kinetic-granular-native/` (own git repo → `origin` = github.com/closestfriend/kinetic-granular-native, never Memetica). Ported from the AI Studio app at `~/Projects/cf audio pack/kinetic-granular`.
 - **CMake + JUCE as a git submodule** (source dependency; nothing to system-install). `clang` already present. Builds native arm64 AU + VST3.
 - Layout:
   ```
