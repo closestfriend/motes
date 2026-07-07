@@ -120,7 +120,7 @@ void ge_render(GranularEngine*, float* left, float* right, int num_frames);
 
 ## 9. Repo & build
 
-- Location: `~/Projects/kinetic-granular-native/` (own git repo → `origin` = github.com/closestfriend/kinetic-granular-native, never Memetica). Ported from the AI Studio app at `~/Projects/cf audio pack/kinetic-granular`.
+- Location: `~/Projects/motes/` (own git repo → `origin` = github.com/closestfriend/motes, never Memetica). Ported from the AI Studio app at `~/Projects/cf audio pack/kinetic-granular`. (Product/repo renamed from "Kinetic Granular" → **Motes** 2026-07-07.)
 - **CMake + JUCE as a git submodule** (source dependency; nothing to system-install). `clang` already present. Builds native arm64 AU + VST3.
 - Layout:
   ```

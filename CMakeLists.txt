@@ -62,6 +62,7 @@ target_link_libraries(granular_core PRIVATE m)
 
 # Plugin
 juce_add_plugin(Motes
+    COMPANY_NAME "closestfriend"     # vendor shown in the DAW's plugin-manufacturer list (was defaulting to "yourcompany")
     PLUGIN_MANUFACTURER_CODE Hntr
     PLUGIN_CODE Mote
     FORMATS AU VST3
