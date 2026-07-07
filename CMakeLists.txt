@@ -67,6 +67,7 @@ juce_add_plugin(KineticGranular
     FORMATS AU VST3
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
+    COPY_PLUGIN_AFTER_BUILD TRUE   # auto-install AU+VST3 to ~/Library/Audio/Plug-Ins on every build (no manual copy → no stale installs)
     PRODUCT_NAME "Kinetic Granular")
 
 target_sources(KineticGranular PRIVATE
