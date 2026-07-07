@@ -147,3 +147,27 @@ void ge_render(GranularEngine*, float* left, float* right, int num_frames);
 - **RT-safety bugs** (allocation/locking on audio thread) — mitigated by pre-allocated pools + message-thread hand-off; the main thing to get right.
 - **JUCE build friction** on first setup (CMake/JUCE versions, codesigning for AU validation) — front-loaded into Milestone 1 so it fails fast.
 - **AU validation** (`auval`) can be picky — validated at Milestone 1, not at the end.
+
+## 12. v2 backlog / deferred ideas
+
+### Marquee: Sample-from-image (luminance → audio)
+Port of the browser reference `~/Projects/cf audio pack/kinetic-granular/src/lib/audio.ts::loadSampleFromImage`. **Turns an image into the granular source** — the most Iris-adjacent idea in the lineage (Iris = image-as-sound), and it dovetails with the plugin's identity (esp. if named around film grain / light).
+
+**Mechanic (as implemented in the browser app):**
+1. Load image, downscale to a max dimension (~512px) so the buffer stays sane (512×512 ≈ 262k samples ≈ 5.9 s @ 44.1k).
+2. Raster-scan every pixel (L→R, top→bottom); per pixel compute perceptual luminance `lum = (0.2126·R + 0.7152·G + 0.0722·B) / 255`.
+3. Map to a mono sample: `sample = lum·2 − 1`. That stream of samples IS the source waveform.
+4. Feed it to the existing `ge_set_sample()` and granulate normally — Position scans left-to-right across the picture; bright = loud, dark = ~silence.
+
+**Native port effort: small (~1 hr).** JUCE decodes images via `ImageFileFormat::loadFrom` and gives pixel access (`Image::BitmapData`); it's a luminance loop → `float*` → `ge_set_sample` — the exact same engine path as WAV load. UI = a second "Load Image…" button beside "Load WAV…". No core/DSP changes.
+
+**Honest caveat:** this is *time-domain* brightness→amplitude (crude), NOT Iris's *frequency-domain* spectrogram resynthesis. Raw, it's buzzy/DC-heavy with pitched artifacts tied to image width; the grain cloud (windowing, spray, drift) is what turns that into usable evolving texture. A true spectral image-resynth (FFT/iFFT) is a much bigger lift and remains out of scope.
+
+### Other deferred items (from whole-branch + per-task reviews — all non-blocking)
+- **Grain length uses source rate, not host rate** — grains run ~`src_rate/host_sr` off when they differ (e.g. a 44.1k sample in a 48k session → grains ~8% short). `voice_render` has `sr` in scope; pass it into `spawn_grain` and use it instead of `smp->sample_rate`.
+- **No headroom/limiter at the summing stage** — 16 voices × up to 64 overlapping grains sum unbounded; extreme Density × Grain Size (e.g. 100 g/s × 500 ms) can hard-clip. Consider a gentle master-stage soft clip.
+- **Linear (not equal-power) pan law** — per-grain pan is a linear crossfade (`lg+rg=2`), giving a ~+3 dB center bump across pan sweeps. Switch to equal-power if per-grain pan loudness feels off.
+- **Per-block string-keyed param fetch** — `processBlock` does 13 `getRawParameterValue(id)` hash lookups every block; RT-safe but wasteful. Cache the 13 `std::atomic<float>*` pointers once.
+- **Grain source-tail goes silent past buffer end** — once `read_pos` crosses `src_frames-1` (high pitch near the buffer end) `sample_at` returns 0 rather than clamping to the last sample; an abrupt silence rather than a graceful tail.
+- **Multi-layer samples / custom waveform GUI / AIFF-FLAC** — larger v2+ scope items from the original non-goals list.
+- **RT-safe live sample hot-swap (v2 hand-off)** — v1 hard-resets voices + serializes the swap under `getCallbackLock`; a proper lock-free double-buffer (atomic pointer swap on `e->sample` + grain-side buffer-generation tagging) would allow glitch-free swaps while sounding.
