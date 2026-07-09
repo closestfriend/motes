@@ -49,10 +49,6 @@ void MotesEditor::paint(juce::Graphics& g) {
                               juce::Colour(0xff0e1420), 0, (float)getHeight(), false);
     g.setGradientFill(grad);
     g.fillRect(0, fieldArea.getBottom(), getWidth(), getHeight()-fieldArea.getBottom());
-    // wordmark
-    g.setColour(juce::Colour(0x66c6d4e6));
-    g.setFont(juce::Font(13.0f, juce::Font::bold));
-    g.drawText("motes", fieldArea.reduced(10), juce::Justification::topLeft);
     // group labels above the knob panel
     g.setColour(juce::Colour(0xff5a6678));
     g.setFont(juce::Font(10.0f));
