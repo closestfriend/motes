@@ -2,6 +2,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
 #include "MotesLookAndFeel.h"
+#include "MotesField.h"
 
 class MotesEditor : public juce::AudioProcessorEditor {
 public:
@@ -23,5 +24,6 @@ private:
     juce::Label fileLabel;
     std::unique_ptr<juce::FileChooser> chooser;
     juce::Rectangle<int> fieldArea;                            // top hero area (Task 3 fills it)
+    std::unique_ptr<MotesField> field;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MotesEditor)
 };

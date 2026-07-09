@@ -126,6 +126,9 @@ void MotesProcessor::setStateInformation(const void* data,int size){
     }
 }
 
+float    MotesProcessor::getOutRms() const      { return ge_get_out_rms(engine); }
+unsigned MotesProcessor::getGrainsFired() const { return ge_get_grains_fired(engine); }
+
 juce::AudioProcessorEditor* MotesProcessor::createEditor()
 {
     return new MotesEditor(*this);

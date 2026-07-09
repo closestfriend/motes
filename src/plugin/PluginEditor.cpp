@@ -16,6 +16,7 @@ void MotesEditor::addKnob(const juce::String& paramId, const juce::String& text)
     k->label.setText(text, juce::dontSendNotification);
     k->label.setJustificationType(juce::Justification::centred);
     k->label.setFont(juce::Font(11.0f));
+    k->label.setColour(juce::Label::textColourId, juce::Colour(0xff7c8aa0));
     addAndMakeVisible(k->label);
     k->attach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         proc.apvts, paramId, k->slider);
@@ -36,16 +37,18 @@ MotesEditor::MotesEditor(MotesProcessor& p) : AudioProcessorEditor(p), proc(p) {
     fileLabel.setColour(juce::Label::textColourId, juce::Colour(0xff7c8aa0));
     fileLabel.setText("(built-in tone)", juce::dontSendNotification);
     addAndMakeVisible(fileLabel);
+    field = std::make_unique<MotesField>(proc); addAndMakeVisible(*field);
     setSize(768, 512);
 }
 
 MotesEditor::~MotesEditor() { for (auto& k : knobs) k->slider.setLookAndFeel(nullptr); }
 
 void MotesEditor::paint(juce::Graphics& g) {
-    // procedural background gradient (Task 3 will draw the particle field into fieldArea)
-    juce::ColourGradient grad(juce::Colour(0xff0a0d12), 0, 0,
+    // procedural background gradient below the field (the field paints itself)
+    juce::ColourGradient grad(juce::Colour(0xff0a0d12), 0, (float)fieldArea.getBottom(),
                               juce::Colour(0xff0e1420), 0, (float)getHeight(), false);
-    g.setGradientFill(grad); g.fillAll();
+    g.setGradientFill(grad);
+    g.fillRect(0, fieldArea.getBottom(), getWidth(), getHeight()-fieldArea.getBottom());
     // wordmark
     g.setColour(juce::Colour(0x66c6d4e6));
     g.setFont(juce::Font(13.0f, juce::Font::bold));
@@ -63,6 +66,7 @@ void MotesEditor::paint(juce::Graphics& g) {
 void MotesEditor::resized() {
     auto r = getLocalBounds();
     fieldArea = r.removeFromTop(300);                 // hero field (Task 3)
+    field->setBounds(fieldArea);
     auto bar = r.removeFromTop(28);                   // sample bar
     loadBtn.setBounds(bar.removeFromLeft(110).reduced(3));
     fileLabel.setBounds(bar.reduced(4));

@@ -36,6 +36,9 @@ public:
     bool loadWavFile(const juce::File& f);   // message thread only; false if decode fails
     juce::MemoryBlock currentSampleWav;      // raw bytes for state
 
+    float    getOutRms() const;
+    unsigned getGrainsFired() const;
+
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout makeLayout();
 
