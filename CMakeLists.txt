@@ -73,7 +73,8 @@ juce_add_plugin(Motes
 
 target_sources(Motes PRIVATE
     src/plugin/PluginProcessor.cpp
-    src/plugin/PluginEditor.cpp)
+    src/plugin/PluginEditor.cpp
+    src/plugin/MotesLookAndFeel.cpp)
 target_link_libraries(Motes PRIVATE
     granular_core
     juce::juce_audio_utils
