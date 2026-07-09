@@ -25,5 +25,6 @@ private:
     std::unique_ptr<juce::FileChooser> chooser;
     juce::Rectangle<int> fieldArea;                            // top hero area (Task 3 fills it)
     std::unique_ptr<MotesField> field;
+    int groupX[4] { 0, 0, 0, 0 };
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MotesEditor)
 };

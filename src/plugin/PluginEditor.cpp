@@ -49,36 +49,39 @@ void MotesEditor::paint(juce::Graphics& g) {
                               juce::Colour(0xff0e1420), 0, (float)getHeight(), false);
     g.setGradientFill(grad);
     g.fillRect(0, fieldArea.getBottom(), getWidth(), getHeight()-fieldArea.getBottom());
-    // group labels above the knob panel
+    // group labels in the strip between the sample bar and the knob row
     g.setColour(juce::Colour(0xff5a6678));
     g.setFont(juce::Font(10.0f));
-    int panelY = fieldArea.getBottom() + 34;
-    g.drawText("GRAIN",   16,  panelY-16, 180, 12, juce::Justification::left);
-    g.drawText("PITCH / POSITION", 200, panelY-16, 180, 12, juce::Justification::left);
-    g.drawText("AMP",     392, panelY-16, 180, 12, juce::Justification::left);
-    g.drawText("MASTER",  660, panelY-16, 100, 12, juce::Justification::left);
+    int labelY = fieldArea.getBottom() + 28 + 2;
+    const char* groupNames[4] = { "GRAIN", "PITCH / POSITION", "AMP", "MASTER" };
+    for (int gr = 0; gr < 4; ++gr)
+        g.drawText(groupNames[gr], groupX[gr], labelY, 180, 12, juce::Justification::left);
 }
 
 void MotesEditor::resized() {
     auto r = getLocalBounds();
-    fieldArea = r.removeFromTop(300);                 // hero field (Task 3)
+    fieldArea = r.removeFromTop(300);
     field->setBounds(fieldArea);
-    auto bar = r.removeFromTop(28);                   // sample bar
+    auto bar = r.removeFromTop(28);
     loadBtn.setBounds(bar.removeFromLeft(110).reduced(3));
     fileLabel.setBounds(bar.reduced(4));
-    // knob panel: 4 groups. Grain(4) Pitch/Pos(4) Amp(4) Master(1)
-    auto panel = r.reduced(8, 6);
-    const int kw = 88, kh = 96;
-    auto place = [&](int idx, int col, int xoff){
-        knobs[idx]->slider.setBounds(xoff + col*kw, panel.getY()+14, kw-6, kh-18);
-        knobs[idx]->label.setBounds (xoff + col*kw, panel.getY()+kh-2, kw-6, 12);
-    };
-    // Grain group: density(0), grain(1), spread(3), panspread(4)
-    place(0,0,8); place(1,1,8); place(3,2,8); place(4,3,8);
-    // Pitch/Pos group: position(2), macro(7), pitchsemi(5), pitchcent(6)
-    place(2,0,200); place(7,1,200); place(5,2,200); place(6,3,200);
-    // Amp group: attack(8), decay(9), sustain(10), release(11)
-    place(8,0,392); place(9,1,392); place(10,2,392); place(11,3,392);
-    // Master(12)
-    place(12,0,660);
+
+    // 13 knobs, one row, four groups (Grain 4 / Pitch+Pos 4 / Amp 4 / Master 1) with gaps.
+    static const int kOrder[13]       = { 0,1,3,4,  2,7,5,6,  8,9,10,11,  12 };
+    static const int knobsPerGroup[4] = { 4,4,4,1 };
+    const int margin = 12, groupGap = 16, knobH = 78;
+    const int usable = getWidth() - 2*margin - 3*groupGap;   // width for the 13 knobs
+    const int knobW  = usable / 13;
+    const int rowY   = fieldArea.getBottom() + 28 + 16;      // below sample bar, leaving a strip for group labels
+    int o = 0, x = margin;
+    for (int gr = 0; gr < 4; ++gr) {
+        groupX[gr] = x;
+        for (int c = 0; c < knobsPerGroup[gr]; ++c) {
+            int idx = kOrder[o++];
+            knobs[idx]->slider.setBounds(x, rowY, knobW-4, knobH);
+            knobs[idx]->label.setBounds (x, rowY + knobH, knobW-4, 12);
+            x += knobW;
+        }
+        x += groupGap;
+    }
 }
