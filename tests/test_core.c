@@ -240,6 +240,24 @@ static void test_engine_polyphony_and_stealing(void){
     printf("test_engine OK\n");
 }
 
+static void test_meters(void){
+    GranularEngine* e=ge_create(44100,16);
+    static float buf[44100]; for(int i=0;i<44100;i++) buf[i]=0.5f;
+    ge_set_sample(e,buf,44100,1,44100);
+    ge_set_param(e,P_DENSITY,50);
+    unsigned before=ge_get_grains_fired(e);
+    ge_note_on(e,60,1.0f);
+    float l[512],r[512];
+    for(int b=0;b<20;b++){ for(int i=0;i<512;i++){l[i]=0;r[i]=0;} ge_render(e,l,r,512); }
+    assert(ge_get_grains_fired(e) > before);   /* grains actually fired */
+    assert(ge_get_out_rms(e) > 0.0f);          /* audible while sounding */
+    ge_note_off(e,60);
+    for(int b=0;b<400;b++){ for(int i=0;i<512;i++){l[i]=0;r[i]=0;} ge_render(e,l,r,512); }
+    assert(ge_get_out_rms(e) < 0.001f);        /* silent after release */
+    ge_destroy(e);
+    printf("test_meters OK\n");
+}
+
 int main(void){
     test_wav_load();
     test_wav_load_24();
@@ -252,6 +270,7 @@ int main(void){
     test_voice_release_small_sustain_near_peak();
     test_position_param_drives_grain_read();
     test_engine_polyphony_and_stealing();
+    test_meters();
     printf("ALL CORE TESTS PASSED\n");
     return 0;
 }

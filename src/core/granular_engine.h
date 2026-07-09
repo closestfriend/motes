@@ -16,3 +16,5 @@ void ge_all_notes_off(GranularEngine*);
 void ge_set_param(GranularEngine*, ParamId id, float value);
 void ge_render(GranularEngine*, float* left, float* right, int num_frames);
 int  ge_active_voice_count(GranularEngine*);
+float    ge_get_out_rms(GranularEngine*);
+unsigned ge_get_grains_fired(GranularEngine*);

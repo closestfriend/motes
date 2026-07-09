@@ -32,7 +32,7 @@ static float adsr_tick(Voice* v, const Params* p, double sr){
     return v->env;
 }
 
-static void spawn_grain(Voice* v, const WavData* smp, const Params* p, unsigned* rng){
+static int spawn_grain(Voice* v, const WavData* smp, const Params* p, unsigned* rng){
     for(int i=0;i<VOICE_MAX_GRAINS;i++){
         if(!v->grains[i].active){
             Grain* g=&v->grains[i];
@@ -45,20 +45,22 @@ static void spawn_grain(Voice* v, const WavData* smp, const Params* p, unsigned*
             if(g->length_samples<2) g->length_samples=2;
             g->age=0; g->pan=(frand(rng)*2.0f-1.0f)*p->pan_spread;
             g->amp=v->velocity; g->active=1;
-            return;
+            return 1;
         }
     }
+    return 0;
 }
 
-void voice_render(Voice* v, const WavData* smp, const Params* p, double sr,
+int voice_render(Voice* v, const WavData* smp, const Params* p, double sr,
                   float* l, float* r, int n, unsigned* rng){
-    if(!v->active || !smp || !smp->data) return;
+    if(!v->active || !smp || !smp->data) return 0;
     double grains_per_sample=p->density/sr;
+    int spawned=0;
     for(int i=0;i<n;i++){
         float env=adsr_tick(v,p,sr);
         /* schedule grains */
         v->grain_phase_acc+=grains_per_sample;
-        while(v->grain_phase_acc>=1.0){ v->grain_phase_acc-=1.0; spawn_grain(v,smp,p,rng); }
+        while(v->grain_phase_acc>=1.0){ v->grain_phase_acc-=1.0; spawned += spawn_grain(v,smp,p,rng); }
         /* macro drift: slow offset applied on top of the live p->position base */
         if(p->macro_speed!=0.0f && smp->num_frames>0)
             v->drift+=(double)p->macro_speed/ (smp->num_frames/sr) / sr;
@@ -70,4 +72,5 @@ void voice_render(Voice* v, const WavData* smp, const Params* p, double sr,
         r[i]+=gr*env*p->master_gain;
         v->age_samples++;
     }
+    return spawned;
 }

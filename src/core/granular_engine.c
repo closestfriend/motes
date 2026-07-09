@@ -6,12 +6,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdatomic.h>
 
 struct GranularEngine {
     double sr; int max_voices; Voice* voices;
     WavData sample; int has_sample;
     Params params; float pitch_semi, pitch_cent;
     unsigned rng;
+    _Atomic float out_rms;
+    atomic_uint grains_fired;
 };
 
 static void recompute_pitch(GranularEngine* e){
@@ -28,6 +31,8 @@ GranularEngine* ge_create(double sr, int max_voices){
     e->params.macro_speed=0.0f; e->params.attack=0.01f; e->params.decay=0.1f;
     e->params.sustain=0.8f; e->params.release=0.3f; e->params.master_gain=0.8f;
     e->pitch_semi=0; e->pitch_cent=0; e->rng=22222u; e->has_sample=0;
+    atomic_init(&e->out_rms, 0.0f);
+    atomic_init(&e->grains_fired, 0u);
     return e;
 }
 void ge_destroy(GranularEngine* e){ if(!e)return; wav_free(&e->sample); free(e->voices); free(e); }
@@ -88,10 +93,19 @@ void ge_set_param(GranularEngine* e, ParamId id, float v){
 
 void ge_render(GranularEngine* e, float* l, float* r, int n){
     for(int i=0;i<n;i++){ l[i]=0.f; r[i]=0.f; }
-    if(!e->has_sample) return;
-    for(int i=0;i<e->max_voices;i++) if(e->voices[i].active)
-        voice_render(&e->voices[i],&e->sample,&e->params,e->sr,l,r,n,&e->rng);
+    unsigned fired=0;
+    if(e->has_sample){
+        for(int i=0;i<e->max_voices;i++) if(e->voices[i].active)
+            fired += (unsigned)voice_render(&e->voices[i],&e->sample,&e->params,e->sr,l,r,n,&e->rng);
+    }
+    if(fired) atomic_fetch_add_explicit(&e->grains_fired, fired, memory_order_relaxed);
+    double sumsq=0.0;
+    for(int i=0;i<n;i++){ sumsq += (double)l[i]*l[i] + (double)r[i]*r[i]; }
+    float rms = (n>0) ? (float)sqrt(sumsq/(2.0*n)) : 0.0f;
+    atomic_store_explicit(&e->out_rms, rms, memory_order_relaxed);
 }
 int ge_active_voice_count(GranularEngine* e){
     int c=0; for(int i=0;i<e->max_voices;i++) if(e->voices[i].active) c++; return c;
 }
+float ge_get_out_rms(GranularEngine* e){ return atomic_load_explicit(&e->out_rms, memory_order_relaxed); }
+unsigned ge_get_grains_fired(GranularEngine* e){ return atomic_load_explicit(&e->grains_fired, memory_order_relaxed); }
