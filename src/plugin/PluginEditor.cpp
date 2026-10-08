@@ -6,6 +6,7 @@ MotesEditor::MotesEditor(MotesProcessor& p) : AudioProcessorEditor(p), proc(p) {
     setLookAndFeel(&lnf);
     addAndMakeVisible(header);
     addAndMakeVisible(footer);
+    addAndMakeVisible(scope);
     addAndMakeVisible(strip);
     footer.onLoad = [this] { launchLoad(); };
     for (const auto& k : kPrimary)  addKnob(k, false);
@@ -46,6 +47,9 @@ void MotesEditor::refreshSample() {
 }
 
 void MotesEditor::timerCallback() {
+    const int n = proc.pullScope(scopeL.data(), scopeR.data(), (int) scopeL.size());
+    scope.addBlock(scopeL.data(), scopeR.data(), n);      // also with n == 0, so the figure keeps fading
+    scope.repaint();
     if (proc.sampleVersion.load() != seenSampleVersion) refreshSample();
 }
 
@@ -58,6 +62,7 @@ void MotesEditor::paint(juce::Graphics& g) {
 
 void MotesEditor::resized() {
     header.setBounds(0, theme::headerY, theme::kW, theme::headerH - 1);
+    scope.setBounds(0, theme::scopeY, theme::kW, theme::scopeH - 1);
     strip.setBounds(0, theme::stripY, theme::kW, theme::stripH - 1);
     footer.setBounds(0, theme::footY + 1, theme::kW, theme::footH - 1);
 

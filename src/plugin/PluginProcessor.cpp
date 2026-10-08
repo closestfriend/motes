@@ -3,6 +3,7 @@
 #include "ParamFormat.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <cmath>
+#include <algorithm>
 #include <vector>
 extern "C" {
 #include "wav.h"
@@ -92,6 +93,37 @@ void MotesProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     auto* L = buffer.getWritePointer(0);
     auto* R = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : L;
     ge_render(engine, L, R, buffer.getNumSamples());
+
+    // Feed the scope. Preallocated SPSC FIFO; if the GUI has stalled and the block doesn't fit we drop
+    // the whole block (keeps blocks contiguous) instead of waiting.
+    const int n = buffer.getNumSamples();
+    if (n > 0 && n <= scopeFifo.getFreeSpace()) {
+        int s1, n1, s2, n2;
+        scopeFifo.prepareToWrite(n, s1, n1, s2, n2);
+        std::copy(L, L + n1, scopeL.begin() + s1);
+        std::copy(R, R + n1, scopeR.begin() + s1);
+        if (n2 > 0) {
+            std::copy(L + n1, L + n, scopeL.begin() + s2);
+            std::copy(R + n1, R + n, scopeR.begin() + s2);
+        }
+        scopeFifo.finishedWrite(n1 + n2);
+    }
+}
+
+int MotesProcessor::pullScope(float* l, float* r, int maxFrames) {
+    const int ready = scopeFifo.getNumReady();
+    if (ready <= 0 || maxFrames <= 0) return 0;
+    const int take = juce::jmin(ready, maxFrames), skip = ready - take;
+    int s1, n1, s2, n2;
+    scopeFifo.prepareToRead(ready, s1, n1, s2, n2);
+    for (int k = 0; k < take; ++k) {
+        const int j = skip + k;
+        const int idx = j < n1 ? s1 + j : s2 + (j - n1);
+        l[k] = scopeL[(size_t) idx];
+        r[k] = scopeR[(size_t) idx];
+    }
+    scopeFifo.finishedRead(n1 + n2);
+    return take;
 }
 
 void MotesProcessor::publishSampleInfo(const juce::String& name, const float* d, int frames, int ch, double rate){

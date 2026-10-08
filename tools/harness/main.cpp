@@ -1,10 +1,11 @@
 // Dev-only headless harness (build with -DMOTES_BUILD_HARNESS=ON). Never part of the plugin.
-//   motes_harness [--set id=value ...] [--load file.wav] [--snapshot out.png] [--scale 2] [--selftest]
+//   motes_harness [--set id=value ...] [--load file.wav] [--play-ms N] [--snapshot out.png] [--scale 2] [--selftest]
 // A PROXY for the real editor in a host: JUCE software renderer, no host, no real mouse or
 // drag-and-drop. Anti-aliasing differs from CoreGraphics, so pixel diffs are indicative only.
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
 #include <cmath>
+#include "ScopeView.h"
 
 static bool writePng(const juce::Image& img, const juce::File& f) {
     f.getParentDirectory().createDirectory();
@@ -68,11 +69,65 @@ static void selftestSamples(MotesProcessor& p) {
     for (float v : p.getSampleInfo().peaks) CHECK(v == 0.f);
 }
 
+// Output FIFO behaviour at the audio/GUI seam.
+static void feedBlocks(MotesProcessor& p, int blocks, bool noteOn) {
+    juce::AudioBuffer<float> buf(2, 512);
+    for (int b = 0; b < blocks; ++b) {
+        juce::MidiBuffer midi;
+        if (noteOn && b == 0) midi.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
+        p.processBlock(buf, midi);
+    }
+}
+
+static void selftestScope(MotesProcessor& p) {
+    CHECK(p.loadWavFile(writeWav("tone.wav", 44100, [](int i) { return 0.5f * std::sin(2.f * 3.14159265f * 220.f * (float) i / 44100.f); }), "tone.wav"));
+    std::vector<float> l(4096), r(4096);
+    p.pullScope(l.data(), r.data(), 4096);                                  // drain whatever the editor session left
+    feedBlocks(p, 4, true);                                                 // 2048 frames queued
+    int n = p.pullScope(l.data(), r.data(), 1600);
+    CHECK(n == 1600);                                                       // newest 1600 of 2048
+    float peak = 0; for (int i = 0; i < n; ++i) peak = std::max(peak, std::abs(l[(size_t) i]) + std::abs(r[(size_t) i]));
+    CHECK(peak > 0.f);                                                      // real output, not zeros
+    CHECK(p.pullScope(l.data(), r.data(), 1600) == 0);                      // the older 448 were discarded, not replayed
+
+    feedBlocks(p, 200, false);                                              // GUI stalled: FIFO full, extra blocks dropped, never blocks
+    n = p.pullScope(l.data(), r.data(), 1600);
+    CHECK(n == 1600);
+    CHECK(p.pullScope(l.data(), r.data(), 1600) == 0);
+    feedBlocks(p, 1, false);                                                // recovers cleanly after the drop
+    CHECK(p.pullScope(l.data(), r.data(), 1600) == 512);
+
+    // Non-finite samples must not poison the auto-gain or the path.
+    MotesLookAndFeel lnf;
+    ScopeView sv(lnf);
+    sv.setBounds(0, 0, 640, 136);
+    std::vector<float> bad(512, 0.5f), good(512, 0.25f);
+    bad[3] = NAN; bad[9] = INFINITY;
+    sv.addBlock(bad.data(), good.data(), 512);
+    CHECK(std::isfinite(sv.currentGain()) && sv.currentGain() >= .3f);
+    sv.addBlock(good.data(), good.data(), 512);
+    CHECK(std::isfinite(sv.currentGain()));
+    auto snap = sv.createComponentSnapshot(sv.getLocalBounds());
+    CHECK(snap.isValid());
+
+    // A mono signal (L == R) must draw a vertical line through the centre: x = R - L = 0.
+    ScopeView mono(lnf);
+    mono.setBounds(0, 0, 640, 136);
+    std::vector<float> sine(512);
+    for (int i = 0; i < 512; ++i) sine[(size_t) i] = 0.5f * std::sin(2.f * 3.14159265f * (float) i / 128.f);
+    mono.addBlock(sine.data(), sine.data(), 512);
+    auto ms = mono.createComponentSnapshot(mono.getLocalBounds());
+    int dark = 0;
+    for (int y = 20; y < 116; ++y) if (ms.getPixelAt(320, y).getBrightness() < 0.6f) ++dark;   // guides are lighter than this
+    CHECK(dark > 20);
+}
+
 int main(int argc, char** argv) {
     juce::ScopedJuceInitialiser_GUI init;
     juce::String snapshot;
     float scale = 1.f;
     bool selftest = false;
+    int playMs = 0;
     juce::String loadPath;
     std::vector<std::pair<juce::String, float>> sets;
     for (int i = 1; i < argc; ++i) {
@@ -80,6 +135,7 @@ int main(int argc, char** argv) {
         if (a == "--snapshot" && i + 1 < argc) snapshot = argv[++i];
         else if (a == "--scale" && i + 1 < argc) scale = juce::String(argv[++i]).getFloatValue();
         else if (a == "--selftest") selftest = true;
+        else if (a == "--play-ms" && i + 1 < argc) playMs = juce::String(argv[++i]).getIntValue();   // hold C4 and run audio in step with the editor timer
         else if (a == "--load" && i + 1 < argc) loadPath = argv[++i];
         else if (a == "--set" && i + 1 < argc) {
             juce::String kv(argv[++i]);
@@ -96,7 +152,14 @@ int main(int argc, char** argv) {
     }
     std::unique_ptr<juce::AudioProcessorEditor> ed(proc.createEditor());
     ed->setBounds(0, 0, 640, 496);
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(300);
+    if (playMs > 0) {
+        for (int i = 0; i < playMs / 16; ++i) {       // 2 blocks (~21 ms of audio) per ~16 ms editor tick
+            feedBlocks(proc, 2, i == 0);
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(16);
+        }
+    } else {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(300);   // (not after --play-ms: the scope would fade out)
+    }
 
     if (snapshot.isNotEmpty()) {
         auto img = ed->createComponentSnapshot(ed->getLocalBounds(), true, scale);
@@ -110,6 +173,7 @@ int main(int argc, char** argv) {
     if (selftest) {
         selftestParams(proc);
         selftestSamples(proc);
+        selftestScope(proc);
         std::printf(failures == 0 ? "selftest OK\n" : "selftest FAILED (%d)\n", failures);
     }
     return failures == 0 ? 0 : 1;

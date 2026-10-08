@@ -6,6 +6,7 @@
 #include "FooterBar.h"
 #include "MotesKnob.h"
 #include "SourceStrip.h"
+#include "ScopeView.h"
 
 class MotesEditor : public juce::AudioProcessorEditor, private juce::Timer {
 public:
@@ -22,7 +23,9 @@ private:
     MotesLookAndFeel lnf;          // declared before the children that borrow its fonts
     HeaderBar header { lnf };
     FooterBar footer { lnf };
+    ScopeView scope { lnf };
     SourceStrip strip { proc.apvts };
+    std::array<float, 1600> scopeL {}, scopeR {};   // newest-frames scratch for the scope, one tick's worth
     int seenSampleVersion = -1;
     std::vector<std::unique_ptr<MotesKnob>> knobs;   // primary 6, then pan group 3, then envelope 4
     int dividerX = 0;

@@ -39,6 +39,11 @@ public:
     bool loadWavFile(const juce::File& f, const juce::String& displayName = {});
     juce::MemoryBlock currentSampleWav;      // raw bytes for state
 
+    // Output samples for the phase scope. The audio thread writes (drops whole blocks when full,
+    // never blocks); the editor calls pullScope on the message thread. Returns frames written to
+    // l/r: the newest `maxFrames` if more are queued (older ones are discarded).
+    int pullScope(float* l, float* r, int maxFrames);
+
     float    getOutRms() const;
     unsigned getGrainsFired() const;
 
@@ -59,6 +64,9 @@ public:
 
 private:
     void publishSampleInfo(const juce::String& name, const float* interleaved, int frames, int channels, double rate);
+    static constexpr int kScopeFifo = 4096;      // ~85 ms at 48 kHz
+    juce::AbstractFifo scopeFifo { kScopeFifo };
+    std::array<float, kScopeFifo> scopeL {}, scopeR {};
     mutable juce::CriticalSection infoLock;
     SampleInfo info;
     GranularEngine* engine = nullptr;
