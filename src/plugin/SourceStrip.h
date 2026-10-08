@@ -9,6 +9,7 @@ class SourceStrip : public juce::Component {
 public:
     static constexpr int kBins = 900;
     explicit SourceStrip(juce::AudioProcessorValueTreeState&);
+    std::function<void()> onDragStart;     // a click/drag on the strip starts here (the editor resets drift)
     void setPeaks(const std::array<float, kBins>&);
     // From the editor's timer: real grains (flash for 250 ms) and the engine's per-voice playheads
     // (-1 = inactive). With no active voice the Position line sits at the parameter value.

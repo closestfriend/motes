@@ -131,3 +131,5 @@ int ge_voice_playing_note(GranularEngine* e, int note){
         if(e->voices[i].active && e->voices[i].note==note && e->voices[i].stage!=4) return 1;
     return 0;
 }
+
+void ge_reset_drift(GranularEngine* e){ for(int i=0;i<e->max_voices;i++) e->voices[i].drift=0.0; }

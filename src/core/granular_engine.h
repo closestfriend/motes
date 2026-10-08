@@ -26,5 +26,7 @@ int  ge_pop_grain_event(GranularEngine*, GrainEvent* out);
 /* Per-voice playheads (0..1, or -1 for an inactive voice). Writes min(max, max_voices) values and
  * returns how many. Relaxed atomics: safe from any thread, may be a block stale. */
 int  ge_get_playheads(GranularEngine*, float* out, int max);
+/* Zero every voice's drift offset so they read from the Position parameter again. Audio thread only. */
+void ge_reset_drift(GranularEngine*);
 /* 1 if a voice that has not started releasing is playing `note`. Audio thread only. */
 int  ge_voice_playing_note(GranularEngine*, int note);

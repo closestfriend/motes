@@ -7,6 +7,8 @@
 #include <cmath>
 #include "ScopeView.h"
 #include "MotesPresets.h"
+#include "FooterBar.h"
+#include "SourceStrip.h"
 
 static bool writePng(const juce::Image& img, const juce::File& f) {
     f.getParentDirectory().createDirectory();
@@ -39,6 +41,10 @@ static void selftestParams(MotesProcessor& p) {
     CHECK(range("density").start == 1.f && range("density").end == 100.f);
     CHECK(p.apvts.getParameter("master")->getText(p.apvts.getParameter("master")->convertTo0to1(0.8f), 0)
               == juce::String::fromUTF8("\xe2\x88\x92" "1.9 dB"));
+    // typed entry in a host field reads back as the display string means
+    CHECK(std::abs(p.apvts.getParameter("spread")->getValueForText("50") - .5f) < 1e-3f);
+    CHECK(std::abs(p.apvts.getParameter("attack")->convertFrom0to1(p.apvts.getParameter("attack")->getValueForText("350 ms")) - .35f) < 2e-3f);
+    CHECK(p.apvts.getParameter("master")->convertFrom0to1(p.apvts.getParameter("master")->getValueForText("-6")) > .49f);
     CHECK(p.apvts.getParameter("density")->getText(p.apvts.getParameter("density")->convertTo0to1(42.f), 0) == "42 g/s");
 }
 
@@ -70,6 +76,35 @@ static void selftestSamples(MotesProcessor& p) {
     for (float v : p.getSampleInfo().peaks) CHECK(v == 0.f);
 }
 
+// Playing a chord puts several voices on one playhead; the 6% spread band must not stack up.
+static void selftestStrip(MotesProcessor& p) {
+    SourceStrip one(p.apvts), many(p.apvts);
+    one.setBounds(0, 0, 640, 40);
+    many.setBounds(0, 0, 640, 40);
+    const float h1[1] = { .5f }, h4[4] = { .5f, .5f, .5f, .5f };
+    one.setPlayheads(h1, 1);
+    many.setPlayheads(h4, 4);
+    const auto a = one.createComponentSnapshot(one.getLocalBounds()), b = many.createComponentSnapshot(many.getLocalBounds());
+    const int x = 330;   // inside the band, off the line, above the bars
+    CHECK(std::abs(a.getPixelAt(x, 2).getBrightness() - b.getPixelAt(x, 2).getBrightness()) < 0.005f);
+}
+
+// A very long sample-pack file name must not overprint the meta or push "Load…" out of reach.
+static void selftestFooter() {
+    MotesLookAndFeel lnf;
+    FooterBar f(lnf);
+    f.setBounds(0, 0, 640, 38);
+    const juce::String meta = juce::String::fromUTF8("3.0 s \xc2\xb7 48 kHz \xc2\xb7 stereo");
+    f.setMeta(meta);
+    f.setFile("Cymatics - Eternity Vocal Chop Granular Texture 120 BPM C# Min Wet Long Tail.wav");
+    const float metaLeft = 620.f - lnf.mono(11.f).getStringWidthFloat(meta);
+    const auto load = f.loadBounds();
+    CHECK(load.getRight() <= metaLeft - 12.f + 0.5f);     // Load… ends before the meta starts (with a gap)
+    CHECK(load.getRight() <= 640.f && load.getX() >= 20.f);
+    f.setFile("short.wav");
+    CHECK(f.loadBounds().getX() < 140.f);                  // short names keep the link right next to the name
+}
+
 // Output FIFO behaviour at the audio/GUI seam.
 static void feedBlocks(MotesProcessor& p, int blocks, bool noteOn) {
     juce::AudioBuffer<float> buf(2, 512);
@@ -98,6 +133,21 @@ static void selftestScope(MotesProcessor& p) {
     feedBlocks(p, 1, false);                                                // recovers cleanly after the drop
     CHECK(p.pullScope(l.data(), r.data(), 1600) == 512);
 
+    // A host block of 4096 frames must still reach the scope (AbstractFifo(4096) holds at most 4095).
+    {
+        p.pullScope(l.data(), r.data(), 4096);
+        juce::AudioBuffer<float> big(2, 4096);
+        juce::MidiBuffer none;
+        p.processBlock(big, none);
+        CHECK(p.pullScope(l.data(), r.data(), 1600) == 1600);
+    }
+    // Reopening the editor must not replay audio queued while it was closed.
+    feedBlocks(p, 4, false);
+    {
+        std::unique_ptr<juce::AudioProcessorEditor> reopened(p.createEditor());
+        CHECK(p.pullScope(l.data(), r.data(), 1600) == 0);
+    }
+
     // Real grain events and playheads reach the processor API the editor polls.
     GrainEvent ge;
     while (p.popGrainEvent(ge)) {}                                           // drain
@@ -110,6 +160,22 @@ static void selftestScope(MotesProcessor& p) {
     CHECK(p.getPlayheads(ph, 16) == 16);
     int live = 0; for (float v : ph) if (v >= 0.f) ++live;
     CHECK(live >= 1);
+
+    // A preset change and a Position click reset the voices' drift offset (the spec's behaviour).
+    p.setHold(true);
+    p.applyPreset(1);                                                       // Glass Rain: Drift -0.30
+    feedBlocks(p, 150, false);
+    p.applyPreset(3);                                                       // Init: Drift 0, Position 0.5
+    feedBlocks(p, 2, false);
+    float ph2[16]; p.getPlayheads(ph2, 16);
+    bool onPosition = false; for (float v : ph2) onPosition = onPosition || (v >= 0.f && std::abs(v - .5f) < .01f);
+    CHECK(onPosition);
+    setParam(p, "macro", .5f); feedBlocks(p, 100, false); setParam(p, "macro", 0.f); feedBlocks(p, 1, false);
+    p.requestDriftReset();                                                  // what a strip mouse-down does
+    feedBlocks(p, 2, false); p.getPlayheads(ph2, 16);
+    onPosition = false; for (float v : ph2) onPosition = onPosition || (v >= 0.f && std::abs(v - .5f) < .01f);
+    CHECK(onPosition);
+    p.setHold(false);
 
     // Non-finite samples must not poison the auto-gain or the path.
     MotesLookAndFeel lnf;
@@ -267,6 +333,8 @@ int main(int argc, char** argv) {
     if (selftest) {
         selftestParams(proc);
         selftestSamples(proc);
+        selftestFooter();
+        selftestStrip(proc);
         selftestScope(proc);
         selftestHold(proc);
         selftestPresetsAndState(proc);

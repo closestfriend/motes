@@ -352,6 +352,25 @@ static void test_drift_wraps(void){
     printf("test_drift_wraps OK\n");
 }
 
+static void test_reset_drift(void){
+    /* Drift is per-voice audio state and is frozen at macro 0, so without a reset a preset change or a Position
+     * click would keep reading from (position + stale offset). */
+    GranularEngine* e=ge_create(44100,16);
+    static float buf[44100]; for(int i=0;i<44100;i++) buf[i]=0.5f;
+    ge_set_sample(e,buf,44100,1,44100);
+    float ph[16], l[512], r[512];
+    ge_set_param(e,P_POSITION,0.2f); ge_set_param(e,P_SPREAD,0.f); ge_set_param(e,P_MACRO_SPEED,0.5f);
+    ge_note_on(e,60,1.f);
+    for(int b=0;b<40;b++) ge_render(e,l,r,512);                          /* drift ~0.23 */
+    ge_set_param(e,P_MACRO_SPEED,0.f);
+    ge_render(e,l,r,64); ge_get_playheads(e,ph,16);
+    int live=0; for(int i=0;i<16;i++) if(ph[i]>=0.f){ live++; assert(ph[i]>0.35f); } assert(live==1);   /* stale offset persists at macro 0 */
+    ge_reset_drift(e);
+    ge_render(e,l,r,64); ge_get_playheads(e,ph,16);
+    for(int i=0;i<16;i++) if(ph[i]>=0.f) assert(fabsf(ph[i]-0.2f)<1e-4f);  /* back on the Position parameter */
+    ge_destroy(e); printf("test_reset_drift OK\n");
+}
+
 int main(void){
     test_wav_load();
     test_wav_load_24();
@@ -370,6 +389,7 @@ int main(void){
     test_grain_events();
     test_playheads_and_playing_note();
     test_drift_wraps();
+    test_reset_drift();
     printf("ALL CORE TESTS PASSED\n");
     return 0;
 }

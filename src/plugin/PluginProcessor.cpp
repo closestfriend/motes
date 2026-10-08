@@ -27,7 +27,9 @@ static juce::NormalisableRange<float> logRng(float a,float b){
 // Value text shared with the editor's knobs, so hosts also show "42 g/s", "-1.9 dB", ...
 static juce::AudioParameterFloatAttributes attrs(const std::string& id){
     return juce::AudioParameterFloatAttributes().withStringFromValueFunction(
-        [id](float v,int){ return juce::String::fromUTF8(fmt::formatParam(id,v).c_str()); });
+        [id](float v,int){ return juce::String::fromUTF8(fmt::formatParam(id,v).c_str()); })
+        .withValueFromStringFunction(
+        [id](const juce::String& s){ return fmt::parseParam(id, s.toRawUTF8()); });
 }
 
 APVTS::ParameterLayout MotesProcessor::makeLayout(){
@@ -85,6 +87,7 @@ void MotesProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     ge_set_param(engine,P_MASTER,g("master"));
 
     buffer.clear();
+    if (driftResetRequested.exchange(false, std::memory_order_relaxed)) ge_reset_drift(engine);
     const bool hold = holdRequested.load(std::memory_order_relaxed);
     for (const auto meta : midi) {
         const auto m = meta.getMessage();
@@ -216,6 +219,7 @@ void MotesProcessor::applyPreset(int index) {
         }
     }
     apvts.state.setProperty("preset", index, nullptr);
+    requestDriftReset();
 }
 
 int MotesProcessor::currentPreset() const {

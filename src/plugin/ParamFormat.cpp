@@ -1,6 +1,7 @@
 #include "ParamFormat.h"
 #include <cmath>
 #include <cstdio>
+#include <cctype>
 #include <cstdlib>
 
 namespace fmt {
@@ -40,6 +41,32 @@ std::string formatParam(std::string_view id, float v) {
         return s + " dB";
     }
     return {};
+}
+
+float parseParam(std::string_view id, std::string_view text) {
+    // Normalise: Unicode minus -> '-', "±" -> nothing, drop spaces, lower-case.
+    std::string t;
+    for (size_t i = 0; i < text.size(); ++i) {
+        const unsigned char c = (unsigned char) text[i];
+        if (text.compare(i, 3, "\u2212") == 0) { t += '-'; i += 2; }
+        else if (text.compare(i, 2, "\u00b1") == 0) { i += 1; }
+        else if (text.compare(i, 3, "\u221e") == 0) { t += "inf"; i += 2; }
+        else if (c != ' ') t += (char) std::tolower(c);
+    }
+    if (t.find("inf") != std::string::npos) return 0.f;      // "-inf dB" or the infinity glyph: silence
+    const char* b = t.c_str();
+    char* end = nullptr;
+    const double n = std::strtod(b, &end);
+    if (end == b) return 0.f;                                                        // no number at all
+    const std::string unit(end);
+    if (id == "position" || id == "spread" || id == "panspread" || id == "sustain") return (float) (n / 100.0);
+    if (id == "attack" || id == "decay" || id == "release") {
+        if (unit.rfind("ms", 0) == 0) return (float) (n / 1000.0);
+        if (unit.rfind("s", 0) == 0) return (float) n;
+        return (float) (n > 5.0 ? n / 1000.0 : n);
+    }
+    if (id == "master") return (float) std::pow(10.0, n / 20.0);
+    return (float) n;
 }
 
 std::string formatSampleMeta(double seconds, double sampleRate, int channels) {

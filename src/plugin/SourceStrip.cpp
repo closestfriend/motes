@@ -59,7 +59,14 @@ void SourceStrip::paint(juce::Graphics& g) {
     // if nothing is sounding, a single one at the Position parameter, which is also the drag handle.
     float heads[kMaxPlayheads];
     int nh = 0;
-    for (int i = 0; i < numPlayheads; ++i) if (playheads[(size_t) i] >= 0.f) heads[nh++] = playheads[(size_t) i];
+    for (int i = 0; i < numPlayheads; ++i) {
+        const float ph = playheads[(size_t) i];
+        if (ph < 0.f) continue;
+        bool duplicate = false;                       // a chord at Drift 0 puts every voice on one playhead: draw it once,
+        for (int k = 0; k < nh; ++k)                  // or the 6% band stacks up (and the CPU cost scales with voice count)
+            duplicate = duplicate || std::abs(ph - heads[k]) * w < .5f;
+        if (!duplicate) heads[nh++] = ph;
+    }
     if (nh == 0) heads[nh++] = position;
 
     for (int i = 0; i < nh; ++i) {
@@ -93,6 +100,10 @@ void SourceStrip::setFromMouse(const juce::MouseEvent& e) {
     const float n = juce::jlimit(0.f, 1.f, e.position.x / (float) juce::jmax(1, getWidth()));
     posAttach.setValueAsPartOfGesture(posParam.convertFrom0to1(n));
 }
-void SourceStrip::mouseDown(const juce::MouseEvent& e) { posAttach.beginGesture(); setFromMouse(e); }
+void SourceStrip::mouseDown(const juce::MouseEvent& e) {
+    if (onDragStart) onDragStart();
+    posAttach.beginGesture();
+    setFromMouse(e);
+}
 void SourceStrip::mouseDrag(const juce::MouseEvent& e) { setFromMouse(e); }
 void SourceStrip::mouseUp(const juce::MouseEvent&)     { posAttach.endGesture(); }

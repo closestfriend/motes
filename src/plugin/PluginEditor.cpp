@@ -15,12 +15,14 @@ MotesEditor::MotesEditor(MotesProcessor& p) : AudioProcessorEditor(p), proc(p) {
     for (const auto& k : kEnvGroup) addKnob(k, true);
     setResizable(false, false);
     setSize(theme::kW, theme::kH);
+    strip.onDragStart = [this] { proc.requestDriftReset(); };
     header.onPrev = [this] { stepPreset(-1); };
     header.onNext = [this] { stepPreset(+1); };
     header.onHold = [this](bool on) { proc.setHold(on); };
     header.setHold(proc.isHoldOn());                         // reopening the editor shows the true state
     refreshPreset();
     refreshSample();
+    proc.pullScope(scopeL.data(), scopeR.data(), (int) scopeL.size());   // drops everything queued while closed
     GrainEvent stale;                                        // a ring filled while no editor was open must not replay as a flash storm
     for (int i = 0; i < 1024 && proc.popGrainEvent(stale); ++i) {}
     startTimerHz(60);

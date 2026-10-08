@@ -11,9 +11,10 @@ public:
     void setMeta(const juce::String& s) { meta = s; repaint(); }
     void paint(juce::Graphics&) override;
     void mouseUp(const juce::MouseEvent&) override;
-    bool hitTest(int x, int y) override { return loadRect().contains((float) x, (float) y); }
+    bool hitTest(int x, int y) override { return loadBounds().contains((float) x, (float) y); }
+    juce::Rectangle<float> loadBounds() const;
 private:
-    juce::Rectangle<float> loadRect() const;
+    juce::String displayedFile() const;      // the name, elided so it never reaches the Load… link or the meta
     const MotesLookAndFeel& lnf;
     juce::String file { "built-in tone" }, meta { juce::String::fromUTF8("1.0 s \xc2\xb7 44.1 kHz \xc2\xb7 mono") };
 };

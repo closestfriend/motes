@@ -53,6 +53,10 @@ public:
     bool isHoldVoiceSounding() const { return ge_voice_playing_note(engine, kHoldNote) != 0; }
     int  getActiveVoiceCount() const { return ge_active_voice_count(engine); }
 
+    // Drift is a per-voice offset that only note-on resets, and it freezes when Drift is 0. A preset change or a
+    // Position click on the strip asks the audio thread to zero it so playback follows the Position knob again.
+    void requestDriftReset() { driftResetRequested.store(true, std::memory_order_relaxed); }
+
     // Factory presets (message thread). The current index is kept in the plugin state.
     void applyPreset(int index);
     int  currentPreset() const;
@@ -78,10 +82,10 @@ public:
 
 private:
     void publishSampleInfo(const juce::String& name, const float* interleaved, int frames, int channels, double rate);
-    static constexpr int kScopeFifo = 4096;      // ~85 ms at 48 kHz
+    static constexpr int kScopeFifo = 8192;      // ~170 ms at 48 kHz; AbstractFifo holds size-1, so blocks up to 8191 frames fit
     juce::AbstractFifo scopeFifo { kScopeFifo };
     std::array<float, kScopeFifo> scopeL {}, scopeR {};
-    std::atomic<bool> holdRequested { false };
+    std::atomic<bool> holdRequested { false }, driftResetRequested { false };
     bool holdWasOn = false;                      // audio thread only
     mutable juce::CriticalSection infoLock;
     SampleInfo info;
