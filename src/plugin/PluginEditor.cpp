@@ -1,16 +1,20 @@
 #include "PluginEditor.h"
 #include "MotesTheme.h"
+#include "ParamFormat.h"
 
 MotesEditor::MotesEditor(MotesProcessor& p) : AudioProcessorEditor(p), proc(p) {
     setLookAndFeel(&lnf);
     addAndMakeVisible(header);
     addAndMakeVisible(footer);
+    addAndMakeVisible(strip);
     footer.onLoad = [this] { launchLoad(); };
     for (const auto& k : kPrimary)  addKnob(k, false);
     for (const auto& k : kPanGroup) addKnob(k, true);
     for (const auto& k : kEnvGroup) addKnob(k, true);
     setResizable(false, false);
     setSize(theme::kW, theme::kH);
+    refreshSample();
+    startTimerHz(60);
 }
 
 MotesEditor::~MotesEditor() { setLookAndFeel(nullptr); }
@@ -27,8 +31,22 @@ void MotesEditor::launchLoad() {
     chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
         [this](const juce::FileChooser& fc) {
             auto f = fc.getResult();
-            if (f.existsAsFile() && proc.loadWavFile(f)) footer.setFile(f.getFileName());
+            if (f.existsAsFile() && proc.loadWavFile(f))
+                proc.apvts.state.setProperty("sampleName", f.getFileName(), nullptr);   // so a restored session shows the name
         });
+}
+
+// Pull name, meta and waveform from the processor whenever the sample changed (Load, drop, or state restore).
+void MotesEditor::refreshSample() {
+    seenSampleVersion = proc.sampleVersion.load();
+    const auto si = proc.getSampleInfo();
+    strip.setPeaks(si.peaks);
+    footer.setFile(si.name);
+    footer.setMeta(juce::String::fromUTF8(fmt::formatSampleMeta(si.seconds, si.sampleRate, si.channels).c_str()));
+}
+
+void MotesEditor::timerCallback() {
+    if (proc.sampleVersion.load() != seenSampleVersion) refreshSample();
 }
 
 void MotesEditor::paint(juce::Graphics& g) {
@@ -40,6 +58,7 @@ void MotesEditor::paint(juce::Graphics& g) {
 
 void MotesEditor::resized() {
     header.setBounds(0, theme::headerY, theme::kW, theme::headerH - 1);
+    strip.setBounds(0, theme::stripY, theme::kW, theme::stripH - 1);
     footer.setBounds(0, theme::footY + 1, theme::kW, theme::footH - 1);
 
     // Primary band: 6 slots of 64px, space-between inside padding 28.

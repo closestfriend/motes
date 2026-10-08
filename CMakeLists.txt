@@ -85,6 +85,7 @@ set(MOTES_PLUGIN_SOURCES
     src/plugin/HeaderBar.cpp
     src/plugin/FooterBar.cpp
     src/plugin/MotesKnob.cpp
+    src/plugin/SourceStrip.cpp
     src/plugin/ParamFormat.cpp
     src/plugin/MotesField.cpp)   # removed in the final cleanup task
 

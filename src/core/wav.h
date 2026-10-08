@@ -19,3 +19,8 @@ typedef struct { float* data; int num_frames; int num_channels; double sample_ra
  */
 int wav_load(const char* path, WavData* out);
 void wav_free(WavData* w);
+
+/* Waveform overview for the UI: `bins` peak values (max |sample| over all channels of the
+ * frames mapped to each bin), normalised so the loudest bin is 1. Silent, empty or NULL input
+ * gives all zeros; NaN/Inf samples are ignored; fewer frames than bins stretches the data. */
+void wav_peaks(const float* interleaved, int frames, int channels, float* out, int bins);

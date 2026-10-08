@@ -1,3 +1,4 @@
+#include <math.h>
 #include "wav.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,3 +55,21 @@ int wav_load(const char* path, WavData* out){
 }
 
 void wav_free(WavData* w){ if(w&&w->data){ free(w->data); w->data=NULL; } }
+
+void wav_peaks(const float* d, int frames, int ch, float* out, int bins){
+    for(int i=0;i<bins;i++) out[i]=0.f;
+    if(!d||frames<=0||ch<=0||bins<=0) return;
+    float top=0.f;
+    for(int i=0;i<bins;i++){
+        long a=(long)i*frames/bins, b=(long)(i+1)*frames/bins;   /* frames [a,b) belong to bin i */
+        if(b<=a) b=a+1;
+        if(b>frames) b=frames;
+        float m=0.f;
+        for(long f=a;f<b;f++) for(int c=0;c<ch;c++){
+            float v=fabsf(d[f*ch+c]);
+            if(v>m && v<1e30f) m=v;                              /* NaN fails the compare; Inf fails the cap */
+        }
+        out[i]=m; if(m>top) top=m;
+    }
+    if(top>0.f) for(int i=0;i<bins;i++) out[i]/=top;
+}

@@ -4,6 +4,9 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <cmath>
 #include <vector>
+extern "C" {
+#include "wav.h"
+}
 
 using APVTS = juce::AudioProcessorValueTreeState;
 using PF = juce::AudioParameterFloat;
@@ -53,6 +56,7 @@ MotesProcessor::MotesProcessor()
     const int N = 44100; std::vector<float> buf((size_t)N);
     for (int i=0;i<N;i++) buf[(size_t)i] = 0.5f*std::sin(2.0*M_PI*220.0*i/44100.0);
     ge_set_sample(engine, buf.data(), N, 1, 44100.0);
+    publishSampleInfo("built-in tone", buf.data(), N, 1, 44100.0);
 }
 MotesProcessor::~MotesProcessor() { ge_destroy(engine); }
 
@@ -90,10 +94,24 @@ void MotesProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     ge_render(engine, L, R, buffer.getNumSamples());
 }
 
-bool MotesProcessor::loadWavFile(const juce::File& f){
+void MotesProcessor::publishSampleInfo(const juce::String& name, const float* d, int frames, int ch, double rate){
+    SampleInfo si;
+    si.name = name; si.sampleRate = rate; si.channels = ch;
+    si.seconds = rate > 0.0 ? frames / rate : 0.0;
+    wav_peaks(d, frames, ch, si.peaks.data(), kPeakBins);
+    { const juce::ScopedLock sl(infoLock); info = std::move(si); }
+    sampleVersion.fetch_add(1);
+}
+
+MotesProcessor::SampleInfo MotesProcessor::getSampleInfo() const {
+    const juce::ScopedLock sl(infoLock);
+    return info;
+}
+
+bool MotesProcessor::loadWavFile(const juce::File& f, const juce::String& displayName){
     juce::AudioFormatManager fm; fm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> rd(fm.createReaderFor(f));
-    if(!rd) return false;
+    if(!rd || rd->numChannels < 1 || rd->lengthInSamples < 1) return false;   // nothing to granulate: keep the current sample
     juce::AudioBuffer<float> tmp((int)rd->numChannels,(int)rd->lengthInSamples);
     rd->read(&tmp,0,(int)rd->lengthInSamples,0,true,true);
     // interleave
@@ -112,6 +130,8 @@ bool MotesProcessor::loadWavFile(const juce::File& f){
         ge_set_sample(engine, inter.data(), n, ch, rd->sampleRate);
         f.loadFileAsData(currentSampleWav);   // keep raw bytes for presets
     }
+    // Peaks + info are for the editor only: computed outside the callback lock.
+    publishSampleInfo(displayName.isNotEmpty() ? displayName : f.getFileName(), inter.data(), n, ch, rd->sampleRate);
     return true;
 }
 
@@ -138,7 +158,9 @@ void MotesProcessor::setStateInformation(const void* data,int size){
         if((size_t)wavLen>(size_t)mis.getNumBytesRemaining()) return; // corrupt length prefix: bail
         currentSampleWav.setSize((size_t)wavLen); mis.read(currentSampleWav.getData(),wavLen);
         auto tmp=juce::File::createTempFile(".wav"); tmp.replaceWithData(currentSampleWav.getData(),currentSampleWav.getSize());
-        if(!loadWavFile(tmp)) currentSampleWav.setSize(0); // decode failed: don't claim a valid sample
+        // the temp file's name is meaningless: show the name the Load path stored in the state
+        const juce::String savedName = apvts.state.getProperty("sampleName").toString();
+        if(!loadWavFile(tmp, savedName.isNotEmpty() ? savedName : juce::String("restored sample"))) currentSampleWav.setSize(0); // decode failed: don't claim a valid sample
         tmp.deleteFile();
     }
 }

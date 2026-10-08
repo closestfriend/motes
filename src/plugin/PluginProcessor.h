@@ -1,5 +1,7 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <array>
+#include <atomic>
 
 extern "C" {
 #include "granular_engine.h"
@@ -33,16 +35,32 @@ public:
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
 
-    bool loadWavFile(const juce::File& f);   // message thread only; false if decode fails
+    // message thread only; false if decode fails. displayName defaults to the file name.
+    bool loadWavFile(const juce::File& f, const juce::String& displayName = {});
     juce::MemoryBlock currentSampleWav;      // raw bytes for state
 
     float    getOutRms() const;
     unsigned getGrainsFired() const;
 
+    // What the editor shows about the loaded sample. Written by whoever loads a sample, read on the
+    // message thread; the audio thread never touches it (so the lock below is not on the audio path).
+    static constexpr int kPeakBins = 900;
+    struct SampleInfo {
+        juce::String name;
+        double seconds = 0.0, sampleRate = 0.0;
+        int channels = 0;
+        std::array<float, kPeakBins> peaks {};
+    };
+    SampleInfo getSampleInfo() const;
+    std::atomic<int> sampleVersion { 0 };     // bumped after every successful sample change
+
     juce::AudioProcessorValueTreeState apvts;
     static juce::AudioProcessorValueTreeState::ParameterLayout makeLayout();
 
 private:
+    void publishSampleInfo(const juce::String& name, const float* interleaved, int frames, int channels, double rate);
+    mutable juce::CriticalSection infoLock;
+    SampleInfo info;
     GranularEngine* engine = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MotesProcessor)

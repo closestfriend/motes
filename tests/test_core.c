@@ -258,6 +258,21 @@ static void test_meters(void){
     printf("test_meters OK\n");
 }
 
+static void test_wav_peaks(void){
+    float pk[900];
+    static float st[2000]; for(int i=0;i<2000;i++) st[i]=0.01f; st[2*500+1]=0.8f;   /* spike on R at frame 500 */
+    wav_peaks(st,1000,2,pk,900);
+    assert(pk[450]==1.0f);                                  /* bin = frame*900/1000 */
+    for(int i=0;i<900;i++) assert(pk[i]>=0.f && pk[i]<=1.f);
+    float tiny[10]={0,.5f,0,0,0,0,0,0,0,0}; wav_peaks(tiny,10,1,pk,900);   /* frames < bins: every bin populated */
+    int nz=0; for(int i=0;i<900;i++) if(pk[i]>0) nz++; assert(nz>=90);
+    float z[64]={0}; wav_peaks(z,64,1,pk,900); for(int i=0;i<900;i++) assert(pk[i]==0.f);   /* silent => zeros, not NaN */
+    float bad[100]; for(int i=0;i<100;i++) bad[i]=0.25f; bad[10]=NAN; bad[20]=INFINITY;
+    wav_peaks(bad,100,1,pk,900); for(int i=0;i<900;i++) assert(isfinite(pk[i]));
+    wav_peaks(NULL,0,0,pk,900); for(int i=0;i<900;i++) assert(pk[i]==0.f);  /* empty input */
+    printf("test_wav_peaks OK\n");
+}
+
 int main(void){
     test_wav_load();
     test_wav_load_24();
@@ -271,6 +286,7 @@ int main(void){
     test_position_param_drives_grain_read();
     test_engine_polyphony_and_stealing();
     test_meters();
+    test_wav_peaks();
     printf("ALL CORE TESTS PASSED\n");
     return 0;
 }
