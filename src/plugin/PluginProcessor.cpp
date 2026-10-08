@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "ParamFormat.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <cmath>
 #include <vector>
@@ -8,21 +9,37 @@ using APVTS = juce::AudioProcessorValueTreeState;
 using PF = juce::AudioParameterFloat;
 static juce::NormalisableRange<float> rng(float a,float b){ return {a,b}; }
 
+// True exponential mapping (min*(max/min)^n), not JUCE's power-law skew: matches the design
+// handoff's knob feel. Host automation stores the normalised value, so this changes how an
+// automation lane maps to the knob for the four parameters that use it; saved values are unchanged.
+static juce::NormalisableRange<float> logRng(float a,float b){
+    return { a, b,
+        [](float s,float e,float n){ return s*std::pow(e/s,n); },
+        [](float s,float e,float v){ return std::log(v/s)/std::log(e/s); },
+        [](float s,float e,float v){ return juce::jlimit(s,e,v); } };
+}
+
+// Value text shared with the editor's knobs, so hosts also show "42 g/s", "-1.9 dB", ...
+static juce::AudioParameterFloatAttributes attrs(const std::string& id){
+    return juce::AudioParameterFloatAttributes().withStringFromValueFunction(
+        [id](float v,int){ return juce::String::fromUTF8(fmt::formatParam(id,v).c_str()); });
+}
+
 APVTS::ParameterLayout MotesProcessor::makeLayout(){
     APVTS::ParameterLayout l;
-    l.add(std::make_unique<PF>("density","Density", rng(1,100), 30.f));
-    l.add(std::make_unique<PF>("grain","Grain Size (ms)", rng(5,500), 120.f));
-    l.add(std::make_unique<PF>("position","Position", rng(0,1), 0.5f));
-    l.add(std::make_unique<PF>("spread","Spread", rng(0,1), 0.05f));
-    l.add(std::make_unique<PF>("panspread","Pan Spread", rng(0,1), 0.2f));
-    l.add(std::make_unique<PF>("pitchsemi","Pitch (semi)", rng(-24,24), 0.f));
-    l.add(std::make_unique<PF>("pitchcent","Pitch (cent)", rng(-100,100), 0.f));
-    l.add(std::make_unique<PF>("macro","Macro Speed", rng(-1,1), 0.f));
-    l.add(std::make_unique<PF>("attack","Attack", rng(0.001f,5), 0.01f));
-    l.add(std::make_unique<PF>("decay","Decay", rng(0.001f,5), 0.1f));
-    l.add(std::make_unique<PF>("sustain","Sustain", rng(0,1), 0.8f));
-    l.add(std::make_unique<PF>("release","Release", rng(0.001f,5), 0.3f));
-    l.add(std::make_unique<PF>("master","Master", rng(0,1), 0.8f));
+    l.add(std::make_unique<PF>("density","Density", rng(1,100), 30.f, attrs("density")));
+    l.add(std::make_unique<PF>("grain","Grain Size (ms)", logRng(5,500), 120.f, attrs("grain")));
+    l.add(std::make_unique<PF>("position","Position", rng(0,1), 0.5f, attrs("position")));
+    l.add(std::make_unique<PF>("spread","Spread", rng(0,1), 0.05f, attrs("spread")));
+    l.add(std::make_unique<PF>("panspread","Pan Spread", rng(0,1), 0.2f, attrs("panspread")));
+    l.add(std::make_unique<PF>("pitchsemi","Pitch (semi)", juce::NormalisableRange<float>(-24,24,1.f), 0.f, attrs("pitchsemi")));
+    l.add(std::make_unique<PF>("pitchcent","Pitch (cent)", rng(-100,100), 0.f, attrs("pitchcent")));
+    l.add(std::make_unique<PF>("macro","Macro Speed", rng(-1,1), 0.f, attrs("macro")));
+    l.add(std::make_unique<PF>("attack","Attack", logRng(0.001f,5), 0.01f, attrs("attack")));
+    l.add(std::make_unique<PF>("decay","Decay", logRng(0.001f,5), 0.1f, attrs("decay")));
+    l.add(std::make_unique<PF>("sustain","Sustain", rng(0,1), 0.8f, attrs("sustain")));
+    l.add(std::make_unique<PF>("release","Release", logRng(0.001f,5), 0.3f, attrs("release")));
+    l.add(std::make_unique<PF>("master","Master", rng(0,1), 0.8f, attrs("master")));
     return l;
 }
 

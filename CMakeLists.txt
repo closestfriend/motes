@@ -84,6 +84,8 @@ set(MOTES_PLUGIN_SOURCES
     src/plugin/MotesLookAndFeel.cpp
     src/plugin/HeaderBar.cpp
     src/plugin/FooterBar.cpp
+    src/plugin/MotesKnob.cpp
+    src/plugin/ParamFormat.cpp
     src/plugin/MotesField.cpp)   # removed in the final cleanup task
 
 target_sources(Motes PRIVATE ${MOTES_PLUGIN_SOURCES})
@@ -121,3 +123,9 @@ target_include_directories(test_core PRIVATE tests)
 target_compile_options(test_core PRIVATE -UNDEBUG)
 enable_testing()
 add_test(NAME core COMMAND test_core)
+
+# JUCE-free tests for the editor's value formatters
+add_executable(test_format tests/test_format.cpp src/plugin/ParamFormat.cpp)
+target_include_directories(test_format PRIVATE src/plugin)
+target_compile_options(test_format PRIVATE -UNDEBUG)
+add_test(NAME format COMMAND test_format)
