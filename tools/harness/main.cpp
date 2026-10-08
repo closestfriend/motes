@@ -1,11 +1,12 @@
 // Dev-only headless harness (build with -DMOTES_BUILD_HARNESS=ON). Never part of the plugin.
-//   motes_harness [--set id=value ...] [--load file.wav] [--play-ms N] [--snapshot out.png] [--scale 2] [--selftest]
+//   motes_harness [--set id=value ...] [--load file.wav] [--preset N] [--hold] [--play-ms N] [--snapshot out.png] [--scale 2] [--selftest]
 // A PROXY for the real editor in a host: JUCE software renderer, no host, no real mouse or
 // drag-and-drop. Anti-aliasing differs from CoreGraphics, so pixel diffs are indicative only.
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
 #include <cmath>
 #include "ScopeView.h"
+#include "MotesPresets.h"
 
 static bool writePng(const juce::Image& img, const juce::File& f) {
     f.getParentDirectory().createDirectory();
@@ -135,12 +136,88 @@ static void selftestScope(MotesProcessor& p) {
     CHECK(dark > 20);
 }
 
+static void blocks(MotesProcessor& p, int n, const juce::MidiBuffer& first = {}) {
+    juce::AudioBuffer<float> buf(2, 512);
+    for (int b = 0; b < n; ++b) { juce::MidiBuffer empty; juce::MidiBuffer m = b == 0 ? first : empty; p.processBlock(buf, m); }
+}
+
+// HOLD latch: it must survive everything that kills or steals voices, and never stack duplicates.
+static void selftestHold(MotesProcessor& p) {
+    juce::MidiBuffer allOff;  allOff.addEvent(juce::MidiMessage::allNotesOff(1), 0);
+    p.setHold(false);
+    blocks(p, 120, allOff);
+    CHECK(p.getActiveVoiceCount() == 0);
+
+    p.setHold(true);
+    blocks(p, 1);
+    CHECK(p.getActiveVoiceCount() == 1 && p.isHoldVoiceSounding());
+
+    juce::MidiBuffer c4;                                                    // a MIDI C4 while HOLD is on is ignored
+    c4.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
+    c4.addEvent(juce::MidiMessage::noteOff(1, 60), 10);
+    blocks(p, 1, c4);
+    CHECK(p.getActiveVoiceCount() == 1 && p.isHoldVoiceSounding());
+
+    blocks(p, 1, allOff);                                                   // host all-notes-off: re-latched at once
+    CHECK(p.isHoldVoiceSounding() && p.getActiveVoiceCount() <= 2);
+    blocks(p, 120);
+    CHECK(p.getActiveVoiceCount() == 1);                                    // the old voice finished releasing: no stacking
+
+    CHECK(p.loadWavFile(writeWav("hold.wav", 22050, [](int i) { return 0.3f * std::sin(0.05f * (float) i); }), "hold.wav"));
+    blocks(p, 1);                                                           // sample swap resets every voice: latch comes back
+    CHECK(p.isHoldVoiceSounding() && p.getActiveVoiceCount() == 1);
+
+    juce::MidiBuffer many;                                                  // 16 more notes steal the oldest (the latch)
+    for (int n = 61; n <= 76; ++n) many.addEvent(juce::MidiMessage::noteOn(1, n, 1.0f), n - 61);
+    blocks(p, 1, many);
+    blocks(p, 1);
+    CHECK(p.isHoldVoiceSounding() && p.getActiveVoiceCount() == 16);
+
+    p.setHold(false);
+    blocks(p, 1);
+    CHECK(!p.isHoldVoiceSounding());
+    blocks(p, 1, allOff);
+    blocks(p, 120);
+    CHECK(p.getActiveVoiceCount() == 0);
+}
+
+// Factory presets set the 13 parameters (not the sample); the state round-trips name, preset and sample but not HOLD.
+static void selftestPresetsAndState(MotesProcessor& p) {
+    auto val = [&](const char* id) { return p.apvts.getRawParameterValue(id)->load(); };
+    CHECK(p.currentPreset() == 3);                                          // starts on "Init", whose values are the parameter defaults
+    p.applyPreset(1);                                                       // Glass Rain
+    CHECK(p.currentPreset() == 1);
+    CHECK(std::abs(val("density") - 88.f) < .01f && std::abs(val("grain") - 24.f) < .05f);
+    CHECK(val("pitchsemi") == 12.f && std::abs(val("pitchcent") + 7.f) < .01f && std::abs(val("macro") + .3f) < .001f);
+    CHECK(std::abs(val("attack") - .005f) < 1e-4f && std::abs(val("release") - .6f) < .002f && std::abs(val("master") - .7f) < .001f);
+    p.applyPreset(0);                                                       // Isolation Drift
+    CHECK(std::abs(val("release") - 1.8f) < .005f && std::abs(val("position") - .38f) < .001f);
+    CHECK(p.getSampleInfo().name == "hold.wav");                            // presets never touch the sample
+
+    p.setHold(true);
+    p.apvts.state.setProperty("sampleName", "hold.wav", nullptr);
+    juce::MemoryBlock state;
+    p.getStateInformation(state);
+    MotesProcessor q;
+    const int v0 = q.sampleVersion.load();
+    q.setStateInformation(state.getData(), (int) state.getSize());
+    CHECK(q.getSampleInfo().name == "hold.wav");                            // not the temp file's name
+    CHECK(q.sampleVersion.load() > v0);                                     // so an open editor refreshes
+    float mx = 0; for (float v : q.getSampleInfo().peaks) mx = std::max(mx, v);
+    CHECK(mx == 1.f);
+    CHECK(q.currentPreset() == 0);
+    CHECK(std::abs(q.apvts.getRawParameterValue("release")->load() - 1.8f) < .005f);
+    CHECK(!q.isHoldOn());                                                   // a project must not start droning on load
+    p.setHold(false);
+}
+
 int main(int argc, char** argv) {
     juce::ScopedJuceInitialiser_GUI init;
     juce::String snapshot;
     float scale = 1.f;
     bool selftest = false;
-    int playMs = 0;
+    int playMs = 0, preset = -1;
+    bool hold = false;
     juce::String loadPath;
     std::vector<std::pair<juce::String, float>> sets;
     for (int i = 1; i < argc; ++i) {
@@ -148,6 +225,8 @@ int main(int argc, char** argv) {
         if (a == "--snapshot" && i + 1 < argc) snapshot = argv[++i];
         else if (a == "--scale" && i + 1 < argc) scale = juce::String(argv[++i]).getFloatValue();
         else if (a == "--selftest") selftest = true;
+        else if (a == "--hold") hold = true;
+        else if (a == "--preset" && i + 1 < argc) preset = juce::String(argv[++i]).getIntValue();
         else if (a == "--play-ms" && i + 1 < argc) playMs = juce::String(argv[++i]).getIntValue();   // hold C4 and run audio in step with the editor timer
         else if (a == "--load" && i + 1 < argc) loadPath = argv[++i];
         else if (a == "--set" && i + 1 < argc) {
@@ -158,7 +237,9 @@ int main(int argc, char** argv) {
 
     MotesProcessor proc;
     proc.prepareToPlay(48000.0, 512);
+    if (preset >= 0) proc.applyPreset(preset);
     for (auto& [id, v] : sets) setParam(proc, id, v);
+    proc.setHold(hold);
     if (loadPath.isNotEmpty() && !proc.loadWavFile(juce::File::getCurrentWorkingDirectory().getChildFile(loadPath))) {
         std::fprintf(stderr, "could not load %s\n", loadPath.toRawUTF8());
         return 1;
@@ -187,6 +268,8 @@ int main(int argc, char** argv) {
         selftestParams(proc);
         selftestSamples(proc);
         selftestScope(proc);
+        selftestHold(proc);
+        selftestPresetsAndState(proc);
         std::printf(failures == 0 ? "selftest OK\n" : "selftest FAILED (%d)\n", failures);
     }
     return failures == 0 ? 0 : 1;

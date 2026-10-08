@@ -1,6 +1,7 @@
 #include "PluginEditor.h"
 #include "MotesTheme.h"
 #include "ParamFormat.h"
+#include "MotesPresets.h"
 
 MotesEditor::MotesEditor(MotesProcessor& p) : AudioProcessorEditor(p), proc(p) {
     setLookAndFeel(&lnf);
@@ -14,6 +15,11 @@ MotesEditor::MotesEditor(MotesProcessor& p) : AudioProcessorEditor(p), proc(p) {
     for (const auto& k : kEnvGroup) addKnob(k, true);
     setResizable(false, false);
     setSize(theme::kW, theme::kH);
+    header.onPrev = [this] { stepPreset(-1); };
+    header.onNext = [this] { stepPreset(+1); };
+    header.onHold = [this](bool on) { proc.setHold(on); };
+    header.setHold(proc.isHoldOn());                         // reopening the editor shows the true state
+    refreshPreset();
     refreshSample();
     GrainEvent stale;                                        // a ring filled while no editor was open must not replay as a flash storm
     for (int i = 0; i < 1024 && proc.popGrainEvent(stale); ++i) {}
@@ -34,9 +40,32 @@ void MotesEditor::launchLoad() {
     chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
         [this](const juce::FileChooser& fc) {
             auto f = fc.getResult();
-            if (f.existsAsFile() && proc.loadWavFile(f))
-                proc.apvts.state.setProperty("sampleName", f.getFileName(), nullptr);   // so a restored session shows the name
+            if (f != juce::File()) loadFile(f);              // an empty result means the dialog was cancelled
         });
+}
+
+// Shared by Load… and drag-and-drop. On success the sample version changes and the timer refreshes name,
+// meta and waveform; on failure the previous sample stays and the footer says so.
+void MotesEditor::loadFile(const juce::File& f) {
+    if (f.existsAsFile() && proc.loadWavFile(f))
+        proc.apvts.state.setProperty("sampleName", f.getFileName(), nullptr);   // so a restored session shows the name
+    else
+        footer.setMeta("could not decode that file");
+}
+
+void MotesEditor::filesDropped(const juce::StringArray& files, int, int y) {
+    // The scope and strip bands are the drop target; the first file wins.
+    if (files.size() > 0 && y >= theme::scopeY && y < theme::stripY + theme::stripH) loadFile(juce::File(files[0]));
+}
+
+void MotesEditor::stepPreset(int delta) {
+    proc.applyPreset((proc.currentPreset() + delta + kNumPresets) % kNumPresets);
+    refreshPreset();
+}
+
+void MotesEditor::refreshPreset() {
+    shownPreset = proc.currentPreset();
+    header.setPresetName(kPresets[shownPreset].name);
 }
 
 // Pull name, meta and waveform from the processor whenever the sample changed (Load, drop, or state restore).
@@ -59,6 +88,7 @@ void MotesEditor::timerCallback() {
     strip.setPlayheads(ph, proc.getPlayheads(ph, 16));
     strip.repaint();                                         // flashes animate, so repaint every tick
     if (proc.sampleVersion.load() != seenSampleVersion) refreshSample();
+    if (proc.currentPreset() != shownPreset) refreshPreset();     // e.g. a state restore while the editor is open
 }
 
 void MotesEditor::paint(juce::Graphics& g) {

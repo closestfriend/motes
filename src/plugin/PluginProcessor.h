@@ -44,6 +44,19 @@ public:
     // l/r: the newest `maxFrames` if more are queued (older ones are discarded).
     int pullScope(float* l, float* r, int maxFrames);
 
+    // HOLD: a latched C4 so the editor makes sound without MIDI. The editor only sets the flag;
+    // processBlock (audio thread) does the note on/off. Not a parameter, not saved in state.
+    static constexpr int kHoldNote = 60;
+    void setHold(bool on)  { holdRequested.store(on, std::memory_order_relaxed); }
+    bool isHoldOn() const  { return holdRequested.load(std::memory_order_relaxed); }
+    // Diagnostics (read audio-thread state without synchronisation; benign, used by the dev harness)
+    bool isHoldVoiceSounding() const { return ge_voice_playing_note(engine, kHoldNote) != 0; }
+    int  getActiveVoiceCount() const { return ge_active_voice_count(engine); }
+
+    // Factory presets (message thread). The current index is kept in the plugin state.
+    void applyPreset(int index);
+    int  currentPreset() const;
+
     // Real grains and playheads from the engine, for the waveform strip (both lock-free).
     bool popGrainEvent(GrainEvent& ev)            { return ge_pop_grain_event(engine, &ev) != 0; }
     int  getPlayheads(float* out, int max) const  { return ge_get_playheads(engine, out, max); }
@@ -71,6 +84,8 @@ private:
     static constexpr int kScopeFifo = 4096;      // ~85 ms at 48 kHz
     juce::AbstractFifo scopeFifo { kScopeFifo };
     std::array<float, kScopeFifo> scopeL {}, scopeR {};
+    std::atomic<bool> holdRequested { false };
+    bool holdWasOn = false;                      // audio thread only
     mutable juce::CriticalSection infoLock;
     SampleInfo info;
     GranularEngine* engine = nullptr;

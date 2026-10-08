@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ParamFormat.h"
+#include "MotesPresets.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <cmath>
 #include <algorithm>
@@ -84,12 +85,20 @@ void MotesProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     ge_set_param(engine,P_MASTER,g("master"));
 
     buffer.clear();
+    const bool hold = holdRequested.load(std::memory_order_relaxed);
     for (const auto meta : midi) {
         const auto m = meta.getMessage();
+        // While HOLD is on the latch already sounds C4: ignore MIDI C4 so it can't stack voices or release the latch.
+        if (hold && (m.isNoteOn() || m.isNoteOff()) && m.getNoteNumber() == kHoldNote) continue;
         if (m.isNoteOn())  ge_note_on(engine, m.getNoteNumber(), m.getFloatVelocity());
         else if (m.isNoteOff()) ge_note_off(engine, m.getNoteNumber());
         else if (m.isAllNotesOff()) ge_all_notes_off(engine);
     }
+    // Latch: (re)start C4 whenever it is not sounding. This also recovers from a sample load (which resets
+    // every voice), a host all-notes-off, and voice stealing.
+    if (hold) { if (!ge_voice_playing_note(engine, kHoldNote)) ge_note_on(engine, kHoldNote, 1.0f); }
+    else if (holdWasOn) ge_note_off(engine, kHoldNote);
+    holdWasOn = hold;
     auto* L = buffer.getWritePointer(0);
     auto* R = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : L;
     ge_render(engine, L, R, buffer.getNumSamples());
@@ -195,6 +204,22 @@ void MotesProcessor::setStateInformation(const void* data,int size){
         if(!loadWavFile(tmp, savedName.isNotEmpty() ? savedName : juce::String("restored sample"))) currentSampleWav.setSize(0); // decode failed: don't claim a valid sample
         tmp.deleteFile();
     }
+}
+
+void MotesProcessor::applyPreset(int index) {
+    index = juce::jlimit(0, kNumPresets - 1, index);
+    for (int k = 0; k < 13; ++k) {
+        if (auto* prm = apvts.getParameter(kPresetIds[k])) {
+            prm->beginChangeGesture();
+            prm->setValueNotifyingHost(prm->convertTo0to1(kPresets[index].v[k]));
+            prm->endChangeGesture();
+        }
+    }
+    apvts.state.setProperty("preset", index, nullptr);
+}
+
+int MotesProcessor::currentPreset() const {
+    return juce::jlimit(0, kNumPresets - 1, (int) apvts.state.getProperty("preset", kInitPreset));
 }
 
 float    MotesProcessor::getOutRms() const      { return ge_get_out_rms(engine); }
