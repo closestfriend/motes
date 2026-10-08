@@ -3,3 +3,4 @@ build/
 *.o
 cmake-build-*/
 .superpowers/
+docs/design-reference/out/

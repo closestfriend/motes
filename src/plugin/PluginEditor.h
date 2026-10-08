@@ -2,7 +2,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
 #include "MotesLookAndFeel.h"
-#include "MotesField.h"
+#include "HeaderBar.h"
+#include "FooterBar.h"
 
 class MotesEditor : public juce::AudioProcessorEditor {
 public:
@@ -11,20 +12,11 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
 private:
-    struct Knob {
-        juce::Slider slider;
-        juce::Label label;
-        std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attach;
-    };
-    void addKnob(const juce::String& paramId, const juce::String& text);
+    void launchLoad();
     MotesProcessor& proc;
-    MotesLookAndFeel lnf;
-    std::vector<std::unique_ptr<Knob>> knobs;                 // in param order
-    juce::TextButton loadBtn { "Load WAV..." };
-    juce::Label fileLabel;
+    MotesLookAndFeel lnf;          // declared before the children that borrow its fonts
+    HeaderBar header { lnf };
+    FooterBar footer { lnf };
     std::unique_ptr<juce::FileChooser> chooser;
-    juce::Rectangle<int> fieldArea;                            // top hero area (Task 3 fills it)
-    std::unique_ptr<MotesField> field;
-    int groupX[4] { 0, 0, 0, 0 };
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MotesEditor)
 };

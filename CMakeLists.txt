@@ -71,17 +71,44 @@ juce_add_plugin(Motes
     COPY_PLUGIN_AFTER_BUILD TRUE   # auto-install AU+VST3 to ~/Library/Audio/Plug-Ins on every build (no manual copy → no stale installs)
     PRODUCT_NAME "Motes")
 
-target_sources(Motes PRIVATE
+# Embedded OFL fonts (Barlow Condensed, IBM Plex Mono); the editor falls back to system fonts if they fail to load
+juce_add_binary_data(MotesFonts NAMESPACE MotesFonts SOURCES
+    assets/fonts/BarlowCondensed-Medium.ttf
+    assets/fonts/BarlowCondensed-SemiBold.ttf
+    assets/fonts/IBMPlexMono-Regular.ttf)
+
+# One list shared by the plugin and the optional dev harness
+set(MOTES_PLUGIN_SOURCES
     src/plugin/PluginProcessor.cpp
     src/plugin/PluginEditor.cpp
     src/plugin/MotesLookAndFeel.cpp
-    src/plugin/MotesField.cpp)
+    src/plugin/HeaderBar.cpp
+    src/plugin/FooterBar.cpp
+    src/plugin/MotesField.cpp)   # removed in the final cleanup task
+
+target_sources(Motes PRIVATE ${MOTES_PLUGIN_SOURCES})
 target_link_libraries(Motes PRIVATE
     granular_core
+    MotesFonts
     juce::juce_audio_utils
     juce::juce_dsp)
 target_compile_definitions(Motes PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+
+# Dev-only headless snapshot + audio/GUI-seam assertions. OFF by default; never built with the plugin.
+option(MOTES_BUILD_HARNESS "Build the headless snapshot/selftest tool (dev only)" OFF)
+if(MOTES_BUILD_HARNESS)
+    juce_add_console_app(motes_harness PRODUCT_NAME "motes_harness")
+    target_sources(motes_harness PRIVATE tools/harness/main.cpp ${MOTES_PLUGIN_SOURCES})
+    target_include_directories(motes_harness PRIVATE src/plugin)
+    target_link_libraries(motes_harness PRIVATE
+        granular_core
+        MotesFonts
+        juce::juce_audio_utils
+        juce::juce_dsp)
+    target_compile_definitions(motes_harness PRIVATE
+        JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
+endif()
 
 # Portable C core test harness
 add_executable(test_core tests/test_core.c tests/wav_fixture.c)
