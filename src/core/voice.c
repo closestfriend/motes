@@ -3,6 +3,13 @@
 #include "window.h"
 #include "event_ring.h"
 #include <math.h>
+
+
+/* position + drift lies in [0,2] (position 0..1, drift 0..1): wrap past the end back to the start.
+ * Clamping here parked every grain at the sample end (silence) whenever drift carried the playhead past 1.0,
+ * which negative macro speed does on its very first sample. Exactly 1.0 stays 1.0. */
+static double wrap_playhead(double x){ return x>1.0 ? x-1.0 : x; }
+
 static float frand(unsigned* s){ *s=*s*1664525u+1013904223u; return ((*s>>8)&0xFFFFFF)/(float)0x1000000; }
 
 void voice_note_on(Voice* v, int note, float velocity){
@@ -13,7 +20,7 @@ void voice_note_on(Voice* v, int note, float velocity){
 }
 void voice_note_off(Voice* v){ if(v->active && v->stage!=0 && v->stage!=4){ v->release_start_env=v->env; v->stage=4; } }
 int voice_is_finished(const Voice* v){ return !v->active; }
-double voice_playhead(const Voice* v, const Params* p){ double x=p->position+v->drift; return x<0?0:(x>1?1:x); }
+double voice_playhead(const Voice* v, const Params* p){ double x=wrap_playhead(p->position+v->drift); return x<0?0:(x>1?1:x); }
 
 static float adsr_tick(Voice* v, const Params* p, double sr){
     float a=p->attack, d=p->decay, s=p->sustain, r=p->release;
@@ -38,7 +45,7 @@ static int spawn_grain(Voice* v, const WavData* smp, const Params* p, unsigned* 
         if(!v->grains[i].active){
             Grain* g=&v->grains[i];
             float spray=(frand(rng)-0.5f)*p->spread;
-            double pos=p->position+v->drift+spray; if(pos<0)pos=0; if(pos>1)pos=1;
+            double pos=wrap_playhead(p->position+v->drift)+spray; if(pos<0)pos=0; if(pos>1)pos=1;
             g->src=smp->data; g->src_frames=smp->num_frames; g->src_channels=smp->num_channels;
             g->read_pos=pos*smp->num_frames;
             g->pitch_ratio=v->note_pitch*p->pitch_mult;

@@ -322,6 +322,36 @@ static void test_playheads_and_playing_note(void){
     ge_destroy(e); printf("test_playheads_and_playing_note OK\n");
 }
 
+static void test_drift_wraps(void){
+    /* position + drift past the end must wrap to the start, not clamp at 1.0 (where grains read silence) */
+    GranularEngine* e=ge_create(44100,16);
+    static float buf[44100]; for(int i=0;i<44100;i++) buf[i]=0.5f;
+    ge_set_sample(e,buf,44100,1,44100);
+    ge_set_param(e,P_POSITION,0.8f); ge_set_param(e,P_SPREAD,0.f);
+    float ph[16], l[512], r[512];
+    ge_note_on(e,60,1.f);
+    ge_set_param(e,P_MACRO_SPEED,1.f);
+    for(int b=0;b<50;b++) ge_render(e,l,r,512);                          /* 25600 frames: drift ~0.58, 0.8+0.58 = 1.38 */
+    ge_get_playheads(e,ph,16);
+    for(int i=0;i<16;i++) if(ph[i]>=0.f) assert(fabsf(ph[i]-0.38f)<0.01f);
+    GrainEvent ev, last={1.f,0.f}; while(ge_pop_grain_event(e,&ev)) last=ev;
+    assert(last.pos<0.5f);                                                   /* newest grain is back near 0.38, not parked at 1.0 */
+    ge_destroy(e);
+
+    /* negative drift: wraps below 0 to ~1.0 on the first sample, so position+drift must wrap, not clamp */
+    e=ge_create(44100,16);
+    ge_set_sample(e,buf,44100,1,44100);
+    ge_set_param(e,P_POSITION,0.7f); ge_set_param(e,P_SPREAD,0.f); ge_set_param(e,P_MACRO_SPEED,-0.3f);
+    ge_note_on(e,60,1.f);
+    for(int b=0;b<20;b++) ge_render(e,l,r,512);
+    ge_get_playheads(e,ph,16);
+    for(int i=0;i<16;i++) if(ph[i]>=0.f) assert(ph[i]<0.75f && ph[i]>0.6f);     /* ~0.7 - a little drift, not stuck at 1.0 */
+    float peak=0; for(int b=0;b<20;b++){ ge_render(e,l,r,512); for(int i=0;i<512;i++) if(fabsf(l[i])>peak) peak=fabsf(l[i]); }
+    assert(peak>0.01f);                                                        /* audible: Glass Rain's Drift -0.30 is not silence */
+    ge_destroy(e);
+    printf("test_drift_wraps OK\n");
+}
+
 int main(void){
     test_wav_load();
     test_wav_load_24();
@@ -339,6 +369,7 @@ int main(void){
     test_event_ring();
     test_grain_events();
     test_playheads_and_playing_note();
+    test_drift_wraps();
     printf("ALL CORE TESTS PASSED\n");
     return 0;
 }
