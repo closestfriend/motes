@@ -87,8 +87,7 @@ set(MOTES_PLUGIN_SOURCES
     src/plugin/MotesKnob.cpp
     src/plugin/SourceStrip.cpp
     src/plugin/ScopeView.cpp
-    src/plugin/ParamFormat.cpp
-    src/plugin/MotesField.cpp)   # removed in the final cleanup task
+    src/plugin/ParamFormat.cpp)
 
 target_sources(Motes PRIVATE ${MOTES_PLUGIN_SOURCES})
 target_link_libraries(Motes PRIVATE

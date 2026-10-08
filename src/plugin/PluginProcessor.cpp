@@ -222,9 +222,6 @@ int MotesProcessor::currentPreset() const {
     return juce::jlimit(0, kNumPresets - 1, (int) apvts.state.getProperty("preset", kInitPreset));
 }
 
-float    MotesProcessor::getOutRms() const      { return ge_get_out_rms(engine); }
-unsigned MotesProcessor::getGrainsFired() const { return ge_get_grains_fired(engine); }
-
 juce::AudioProcessorEditor* MotesProcessor::createEditor()
 {
     return new MotesEditor(*this);

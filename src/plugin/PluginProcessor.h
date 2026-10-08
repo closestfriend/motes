@@ -61,9 +61,6 @@ public:
     bool popGrainEvent(GrainEvent& ev)            { return ge_pop_grain_event(engine, &ev) != 0; }
     int  getPlayheads(float* out, int max) const  { return ge_get_playheads(engine, out, max); }
 
-    float    getOutRms() const;
-    unsigned getGrainsFired() const;
-
     // What the editor shows about the loaded sample. Written by whoever loads a sample, read on the
     // message thread; the audio thread never touches it (so the lock below is not on the audio path).
     static constexpr int kPeakBins = 900;
