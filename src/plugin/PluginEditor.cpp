@@ -15,6 +15,8 @@ MotesEditor::MotesEditor(MotesProcessor& p) : AudioProcessorEditor(p), proc(p) {
     setResizable(false, false);
     setSize(theme::kW, theme::kH);
     refreshSample();
+    GrainEvent stale;                                        // a ring filled while no editor was open must not replay as a flash storm
+    for (int i = 0; i < 1024 && proc.popGrainEvent(stale); ++i) {}
     startTimerHz(60);
 }
 
@@ -50,6 +52,12 @@ void MotesEditor::timerCallback() {
     const int n = proc.pullScope(scopeL.data(), scopeR.data(), (int) scopeL.size());
     scope.addBlock(scopeL.data(), scopeR.data(), n);      // also with n == 0, so the figure keeps fading
     scope.repaint();
+
+    GrainEvent ev;
+    for (int budget = 256; budget > 0 && proc.popGrainEvent(ev); --budget) strip.addGrainEvent(ev);
+    float ph[16];
+    strip.setPlayheads(ph, proc.getPlayheads(ph, 16));
+    strip.repaint();                                         // flashes animate, so repaint every tick
     if (proc.sampleVersion.load() != seenSampleVersion) refreshSample();
 }
 

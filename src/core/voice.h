@@ -4,6 +4,7 @@
 #include "params.h"
 
 #define VOICE_MAX_GRAINS 64
+struct GrainEventRing;   /* event_ring.h; optional sink for spawned-grain events */
 typedef struct {
     int active; int note; float note_pitch; /* 2^((note-60)/12) */
     double drift; /* 0..1-ish macro-drift OFFSET added to p->position (NOT an absolute playhead) */
@@ -14,6 +15,7 @@ typedef struct {
     float env; float velocity;
     float release_start_env; /* env captured at moment release begins */
     unsigned age_samples; /* for stealing (oldest = largest) */
+    struct GrainEventRing* events; /* may be NULL (tests, standalone voices): then no events are emitted */
 } Voice;
 
 void voice_note_on(Voice* v, int note, float velocity);
@@ -23,3 +25,5 @@ void voice_note_off(Voice* v);
 int voice_render(Voice* v, const WavData* smp, const Params* p,
                   double sr, float* l, float* r, int n, unsigned* rng);
 int voice_is_finished(const Voice* v);
+/* Where this voice is reading from right now (position + drift, wrapped into 0..1), for the UI. */
+double voice_playhead(const Voice* v, const Params* p);

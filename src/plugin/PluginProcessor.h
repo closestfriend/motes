@@ -44,6 +44,10 @@ public:
     // l/r: the newest `maxFrames` if more are queued (older ones are discarded).
     int pullScope(float* l, float* r, int maxFrames);
 
+    // Real grains and playheads from the engine, for the waveform strip (both lock-free).
+    bool popGrainEvent(GrainEvent& ev)            { return ge_pop_grain_event(engine, &ev) != 0; }
+    int  getPlayheads(float* out, int max) const  { return ge_get_playheads(engine, out, max); }
+
     float    getOutRms() const;
     unsigned getGrainsFired() const;
 

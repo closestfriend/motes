@@ -3,6 +3,7 @@
 #include "params.h"
 #include "wav.h"
 #include "window.h"
+#include "event_ring.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -15,6 +16,8 @@ struct GranularEngine {
     unsigned rng;
     _Atomic float out_rms;
     atomic_uint grains_fired;
+    GrainEventRing events;
+    _Atomic float* playheads;   /* max_voices entries, -1 = inactive */
 };
 
 static void recompute_pitch(GranularEngine* e){
@@ -33,9 +36,12 @@ GranularEngine* ge_create(double sr, int max_voices){
     e->pitch_semi=0; e->pitch_cent=0; e->rng=22222u; e->has_sample=0;
     atomic_init(&e->out_rms, 0.0f);
     atomic_init(&e->grains_fired, 0u);
+    ger_init(&e->events);
+    e->playheads=(_Atomic float*)calloc(max_voices,sizeof(_Atomic float));
+    for(int i=0;i<max_voices;i++){ atomic_init(&e->playheads[i],-1.0f); e->voices[i].events=&e->events; }
     return e;
 }
-void ge_destroy(GranularEngine* e){ if(!e)return; wav_free(&e->sample); free(e->voices); free(e); }
+void ge_destroy(GranularEngine* e){ if(!e)return; wav_free(&e->sample); free(e->voices); free((void*)e->playheads); free(e); }
 void ge_prepare(GranularEngine* e, double sr){ e->sr=sr; }
 
 void ge_set_sample(GranularEngine* e, const float* interleaved, int frames, int ch, double src_rate){
@@ -103,9 +109,25 @@ void ge_render(GranularEngine* e, float* l, float* r, int n){
     for(int i=0;i<n;i++){ sumsq += (double)l[i]*l[i] + (double)r[i]*r[i]; }
     float rms = (n>0) ? (float)sqrt(sumsq/(2.0*n)) : 0.0f;
     atomic_store_explicit(&e->out_rms, rms, memory_order_relaxed);
+    for(int i=0;i<e->max_voices;i++){
+        float ph=e->voices[i].active?(float)voice_playhead(&e->voices[i],&e->params):-1.0f;
+        atomic_store_explicit(&e->playheads[i],ph,memory_order_relaxed);
+    }
 }
 int ge_active_voice_count(GranularEngine* e){
     int c=0; for(int i=0;i<e->max_voices;i++) if(e->voices[i].active) c++; return c;
 }
 float ge_get_out_rms(GranularEngine* e){ return atomic_load_explicit(&e->out_rms, memory_order_relaxed); }
 unsigned ge_get_grains_fired(GranularEngine* e){ return atomic_load_explicit(&e->grains_fired, memory_order_relaxed); }
+
+int ge_pop_grain_event(GranularEngine* e, GrainEvent* out){ return ger_pop(&e->events,out); }
+int ge_get_playheads(GranularEngine* e, float* out, int max){
+    int n=max<e->max_voices?max:e->max_voices;
+    for(int i=0;i<n;i++) out[i]=atomic_load_explicit(&e->playheads[i],memory_order_relaxed);
+    return n;
+}
+int ge_voice_playing_note(GranularEngine* e, int note){
+    for(int i=0;i<e->max_voices;i++)
+        if(e->voices[i].active && e->voices[i].note==note && e->voices[i].stage!=4) return 1;
+    return 0;
+}

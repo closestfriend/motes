@@ -5,6 +5,7 @@
 #include "voice.h"
 #include "params.h"
 #include "granular_engine.h"
+#include "event_ring.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -273,6 +274,54 @@ static void test_wav_peaks(void){
     printf("test_wav_peaks OK\n");
 }
 
+static void test_event_ring(void){
+    GrainEventRing r; ger_init(&r);
+    for(int i=0;i<GE_EVENT_RING_SIZE;i++){ GrainEvent e={(float)i,0.f}; assert(ger_push(&r,e)==1); }
+    GrainEvent x={0,0}; assert(ger_push(&r,x)==0);                       /* full => dropped, nothing overwritten */
+    assert(atomic_load(&r.dropped)==1u);
+    GrainEvent o; for(int i=0;i<GE_EVENT_RING_SIZE;i++){ assert(ger_pop(&r,&o)==1); assert(o.pos==(float)i); }   /* FIFO order */
+    assert(ger_pop(&r,&o)==0);
+    for(int i=0;i<3*GE_EVENT_RING_SIZE;i++){ GrainEvent e={(float)i,0.f}; assert(ger_push(&r,e)); assert(ger_pop(&r,&o)&&o.pos==(float)i); }  /* wraparound */
+    printf("test_event_ring OK\n");
+}
+
+static void test_grain_events(void){
+    GranularEngine* e=ge_create(44100,16);
+    static float buf[44100]; for(int i=0;i<44100;i++) buf[i]=0.5f;
+    ge_set_sample(e,buf,44100,1,44100);
+    ge_set_param(e,P_DENSITY,50); ge_set_param(e,P_POSITION,0.25f); ge_set_param(e,P_SPREAD,0.f); ge_set_param(e,P_GRAIN_MS,100.f);
+    unsigned before=ge_get_grains_fired(e);
+    ge_note_on(e,60,1.0f);
+    float l[512],r[512]; for(int b=0;b<20;b++) ge_render(e,l,r,512);
+    GrainEvent ev; int n=0;
+    while(ge_pop_grain_event(e,&ev)){ n++; assert(fabsf(ev.pos-0.25f)<1e-4f); assert(fabsf(ev.span-0.1f)<1e-3f); }
+    assert(n>0 && (unsigned)n==ge_get_grains_fired(e)-before);           /* one event per spawned grain */
+    ge_set_param(e,P_PITCH_SEMI,12.f); ge_render(e,l,r,512);             /* +12 st => grain reads twice the source */
+    while(ge_pop_grain_event(e,&ev)) assert(fabsf(ev.span-0.2f)<1e-3f);
+    ge_destroy(e);
+    /* 0-frame sample must not divide by zero or emit events */
+    e=ge_create(44100,16); float one=0; ge_set_sample(e,&one,0,1,44100); ge_note_on(e,60,1.f); ge_render(e,l,r,512);
+    assert(!ge_pop_grain_event(e,&ev)); ge_destroy(e);
+    printf("test_grain_events OK\n");
+}
+
+static void test_playheads_and_playing_note(void){
+    GranularEngine* e=ge_create(44100,16);
+    static float buf[44100]; for(int i=0;i<44100;i++) buf[i]=0.5f;
+    ge_set_sample(e,buf,44100,1,44100);
+    float ph[16], l[512], r[512];
+    ge_set_param(e,P_POSITION,0.4f); ge_render(e,l,r,64);
+    assert(ge_get_playheads(e,ph,16)==16); for(int i=0;i<16;i++) assert(ph[i]<0.f);
+    assert(!ge_voice_playing_note(e,60));
+    ge_note_on(e,60,1.f); ge_render(e,l,r,64); ge_get_playheads(e,ph,16);
+    int live=0; for(int i=0;i<16;i++) if(ph[i]>=0.f){ live++; assert(fabsf(ph[i]-0.4f)<1e-4f); } assert(live==1);
+    assert(ge_voice_playing_note(e,60) && !ge_voice_playing_note(e,61));
+    ge_set_param(e,P_MACRO_SPEED,1.f); for(int b=0;b<50;b++) ge_render(e,l,r,512);   /* drift ~0.58 */
+    ge_get_playheads(e,ph,16); for(int i=0;i<16;i++) if(ph[i]>=0.f){ assert(ph[i]>0.45f && ph[i]<=1.0f); }
+    ge_note_off(e,60); assert(!ge_voice_playing_note(e,60));                          /* releasing is not "playing" */
+    ge_destroy(e); printf("test_playheads_and_playing_note OK\n");
+}
+
 int main(void){
     test_wav_load();
     test_wav_load_24();
@@ -287,6 +336,9 @@ int main(void){
     test_engine_polyphony_and_stealing();
     test_meters();
     test_wav_peaks();
+    test_event_ring();
+    test_grain_events();
+    test_playheads_and_playing_note();
     printf("ALL CORE TESTS PASSED\n");
     return 0;
 }

@@ -1,8 +1,8 @@
 #include "voice.h"
 #include "params.h"
 #include "window.h"
+#include "event_ring.h"
 #include <math.h>
-
 static float frand(unsigned* s){ *s=*s*1664525u+1013904223u; return ((*s>>8)&0xFFFFFF)/(float)0x1000000; }
 
 void voice_note_on(Voice* v, int note, float velocity){
@@ -13,6 +13,7 @@ void voice_note_on(Voice* v, int note, float velocity){
 }
 void voice_note_off(Voice* v){ if(v->active && v->stage!=0 && v->stage!=4){ v->release_start_env=v->env; v->stage=4; } }
 int voice_is_finished(const Voice* v){ return !v->active; }
+double voice_playhead(const Voice* v, const Params* p){ double x=p->position+v->drift; return x<0?0:(x>1?1:x); }
 
 static float adsr_tick(Voice* v, const Params* p, double sr){
     float a=p->attack, d=p->decay, s=p->sustain, r=p->release;
@@ -45,6 +46,11 @@ static int spawn_grain(Voice* v, const WavData* smp, const Params* p, unsigned* 
             if(g->length_samples<2) g->length_samples=2;
             g->age=0; g->pan=(frand(rng)*2.0f-1.0f)*p->pan_spread;
             g->amp=v->velocity; g->active=1;
+            if(v->events && smp->num_frames>0){
+                double span=(double)g->length_samples*g->pitch_ratio/(double)smp->num_frames;
+                GrainEvent ev={ (float)pos, (float)(span>1.0?1.0:span) };
+                ger_push(v->events,ev);
+            }
             return 1;
         }
     }

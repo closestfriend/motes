@@ -97,6 +97,19 @@ static void selftestScope(MotesProcessor& p) {
     feedBlocks(p, 1, false);                                                // recovers cleanly after the drop
     CHECK(p.pullScope(l.data(), r.data(), 1600) == 512);
 
+    // Real grain events and playheads reach the processor API the editor polls.
+    GrainEvent ge;
+    while (p.popGrainEvent(ge)) {}                                           // drain
+    p.setCurrentProgram(0);
+    feedBlocks(p, 40, false);                                               // the held note from above is still sounding
+    int events = 0; bool sane = true;
+    while (p.popGrainEvent(ge)) { ++events; sane = sane && ge.pos >= 0.f && ge.pos <= 1.f && ge.span > 0.f && ge.span <= 1.f; }
+    CHECK(events > 0 && sane);
+    float ph[16];
+    CHECK(p.getPlayheads(ph, 16) == 16);
+    int live = 0; for (float v : ph) if (v >= 0.f) ++live;
+    CHECK(live >= 1);
+
     // Non-finite samples must not poison the auto-gain or the path.
     MotesLookAndFeel lnf;
     ScopeView sv(lnf);
