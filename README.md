@@ -1,4 +1,4 @@
-# Motes
+## Motes
 
 A polyphonic granular sample-as-synth for Ableton Live. Load a sample, play it from MIDI, and shape the grain cloud
 with 13 parameters. Native Apple Silicon (arm64), AU and VST3.
