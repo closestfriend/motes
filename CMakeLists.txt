@@ -3,49 +3,53 @@ project(Motes VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "" FORCE)
+if(APPLE)
+    set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "" FORCE)
+endif()
 
-# --- Auto-apply local JUCE patches (vendored, not upstream) -----------------
-# The JUCE submodule is pinned to the clean upstream 7.0.12 tag commit so a
-# fresh clone / `git submodule update --init` always works. The macOS 15 SDK
-# CGWindowListCreateImage fix (needed because that tag predates the SDK 15
-# obsoletion annotation) lives only as a patch file and is applied here,
-# before add_subdirectory(JUCE), so every configure produces a patched tree.
-# Guarded with `git apply --reverse --check` so re-running `cmake -B build`
-# on an already-patched tree is a no-op instead of an error.
-set(KGRN_JUCE_PATCH "${CMAKE_SOURCE_DIR}/patches/0001-juce-7.0.12-macos15-sdk-cgwindowlistcreateimage.patch")
+if(APPLE)
+    # --- Auto-apply local JUCE patches (vendored, not upstream) -----------------
+    # The JUCE submodule is pinned to the clean upstream 7.0.12 tag commit so a
+    # fresh clone / `git submodule update --init` always works. The macOS 15 SDK
+    # CGWindowListCreateImage fix (needed because that tag predates the SDK 15
+    # obsoletion annotation) lives only as a patch file and is applied here,
+    # before add_subdirectory(JUCE), so every configure produces a patched tree.
+    # Guarded with `git apply --reverse --check` so re-running `cmake -B build`
+    # on an already-patched tree is a no-op instead of an error.
+    set(KGRN_JUCE_PATCH "${CMAKE_SOURCE_DIR}/patches/0001-juce-7.0.12-macos15-sdk-cgwindowlistcreateimage.patch")
 
-execute_process(
-    COMMAND git apply --reverse --check "${KGRN_JUCE_PATCH}"
-    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/JUCE"
-    RESULT_VARIABLE KGRN_JUCE_PATCH_ALREADY_APPLIED
-    OUTPUT_QUIET
-    ERROR_QUIET)
-
-if(KGRN_JUCE_PATCH_ALREADY_APPLIED EQUAL 0)
-    message(STATUS "kinetic-granular: JUCE macOS15 SDK patch already applied, skipping")
-else()
     execute_process(
-        COMMAND git apply --check "${KGRN_JUCE_PATCH}"
+        COMMAND git apply --reverse --check "${KGRN_JUCE_PATCH}"
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/JUCE"
-        RESULT_VARIABLE KGRN_JUCE_PATCH_CAN_APPLY
+        RESULT_VARIABLE KGRN_JUCE_PATCH_ALREADY_APPLIED
         OUTPUT_QUIET
         ERROR_QUIET)
 
-    if(NOT KGRN_JUCE_PATCH_CAN_APPLY EQUAL 0)
-        message(FATAL_ERROR "kinetic-granular: JUCE macOS15 SDK patch (${KGRN_JUCE_PATCH}) does not apply cleanly to JUCE/. The submodule may not be at the expected 7.0.12 upstream commit, or the JUCE working tree is dirty. Aborting configure rather than building against an unpatched/unknown tree.")
+    if(KGRN_JUCE_PATCH_ALREADY_APPLIED EQUAL 0)
+        message(STATUS "kinetic-granular: JUCE macOS15 SDK patch already applied, skipping")
+    else()
+        execute_process(
+            COMMAND git apply --check "${KGRN_JUCE_PATCH}"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/JUCE"
+            RESULT_VARIABLE KGRN_JUCE_PATCH_CAN_APPLY
+            OUTPUT_QUIET
+            ERROR_QUIET)
+
+        if(NOT KGRN_JUCE_PATCH_CAN_APPLY EQUAL 0)
+            message(FATAL_ERROR "kinetic-granular: JUCE macOS15 SDK patch (${KGRN_JUCE_PATCH}) does not apply cleanly to JUCE/. The submodule may not be at the expected 7.0.12 upstream commit, or the JUCE working tree is dirty. Aborting configure rather than building against an unpatched/unknown tree.")
+        endif()
+
+        execute_process(
+            COMMAND git apply "${KGRN_JUCE_PATCH}"
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/JUCE"
+            RESULT_VARIABLE KGRN_JUCE_PATCH_APPLY_RESULT)
+
+        if(NOT KGRN_JUCE_PATCH_APPLY_RESULT EQUAL 0)
+            message(FATAL_ERROR "kinetic-granular: failed to apply JUCE macOS15 SDK patch (${KGRN_JUCE_PATCH})")
+        endif()
+
+        message(STATUS "kinetic-granular: applied JUCE macOS15 SDK CGWindowListCreateImage patch")
     endif()
-
-    execute_process(
-        COMMAND git apply "${KGRN_JUCE_PATCH}"
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/JUCE"
-        RESULT_VARIABLE KGRN_JUCE_PATCH_APPLY_RESULT)
-
-    if(NOT KGRN_JUCE_PATCH_APPLY_RESULT EQUAL 0)
-        message(FATAL_ERROR "kinetic-granular: failed to apply JUCE macOS15 SDK patch (${KGRN_JUCE_PATCH})")
-    endif()
-
-    message(STATUS "kinetic-granular: applied JUCE macOS15 SDK CGWindowListCreateImage patch")
 endif()
 
 add_subdirectory(JUCE)
@@ -58,7 +62,18 @@ add_library(granular_core STATIC
     src/core/window.c
     src/core/wav.c)
 target_include_directories(granular_core PUBLIC src/core)
-target_link_libraries(granular_core PRIVATE m)
+if(NOT MSVC)
+    target_link_libraries(granular_core PRIVATE m)
+endif()
+
+# Auto-install plugin after build. Default to ON for local dev on macOS; can be disabled with -DMOTES_COPY_PLUGIN_AFTER_BUILD=OFF (e.g. in CI or on Windows)
+if(NOT DEFINED MOTES_COPY_PLUGIN_AFTER_BUILD)
+    if(APPLE)
+        set(MOTES_COPY_PLUGIN_AFTER_BUILD TRUE)
+    else()
+        set(MOTES_COPY_PLUGIN_AFTER_BUILD FALSE)
+    endif()
+endif()
 
 # Plugin
 juce_add_plugin(Motes
@@ -68,7 +83,7 @@ juce_add_plugin(Motes
     FORMATS AU VST3
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
-    COPY_PLUGIN_AFTER_BUILD TRUE   # auto-install AU+VST3 to ~/Library/Audio/Plug-Ins on every build (no manual copy → no stale installs)
+    COPY_PLUGIN_AFTER_BUILD ${MOTES_COPY_PLUGIN_AFTER_BUILD}   # auto-install AU+VST3 to ~/Library/Audio/Plug-Ins on every build (no manual copy → no stale installs)
     PRODUCT_NAME "Motes")
 
 # Embedded OFL fonts (Barlow Condensed, IBM Plex Mono); the editor falls back to system fonts if they fail to load
