@@ -2,7 +2,7 @@
 
 A polyphonic granular synthesizer.
 
-![The Motes editor](docs/images/motes-editor.png)
+![The Motes editor](/motes-demo-recording.gif)
 
 
 - **Phase scope** — a live stereo goniometer of the real output.
