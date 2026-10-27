@@ -1,11 +1,9 @@
 ## Motes
 
-A polyphonic granular sample-as-synth for Ableton Live. Load a sample, play it from MIDI, and shape the grain cloud
-with 13 parameters. Native Apple Silicon (arm64), AU and VST3.
+A polyphonic granular synthesizer.
 
 ![The Motes editor](docs/images/motes-editor.png)
 
-The editor shows what the engine is actually doing:
 
 - **Phase scope** — a live stereo goniometer of the real output.
 - **Source strip** — the sample's waveform, with the spread band, the playhead of each sounding voice, and a flash for every grain as it is cut.
