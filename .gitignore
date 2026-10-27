@@ -4,3 +4,10 @@ build/
 cmake-build-*/
 .superpowers/
 docs/design-reference/out/
+CLAUDE.md
+AGENTS.md
+.claude/
+.env
+.env.local
+*.zip
+design_handoff_motes_editor*/

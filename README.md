@@ -5,11 +5,17 @@ A polyphonic granular sample-as-synth for Ableton Live and other DAWs. Load a sa
 ![The Motes editor](/motes-demo-recording.gif)
 
 
-- **Phase scope** — a live stereo goniometer of the real output.
-- **Source strip** — the sample's waveform, with the spread band, the playhead of each sounding voice, and a flash for every grain as it is cut.
-- **13 knobs** — Density, Size, Spread, Position, Pitch, Master, Pan, Drift, Fine, Attack, Decay, Sustain, Release. Drag, Shift to fine-tune, double-click to reset.
-- **Header** — factory presets (‹ ›) and **HOLD**, which latches a note so you can audition without MIDI.
+- **Phase scope**: a live stereo goniometer of the real output.
+- **Source strip**: the sample's waveform, with the spread band, the playhead of each sounding voice, and a flash for every grain as it is cut.
+- **13 knobs**: Density, Size, Spread, Position, Pitch, Master, Pan, Drift, Fine, Attack, Decay, Sustain, Release. Drag, Shift to fine-tune, double-click to reset.
+- **Header**: factory presets (‹ ›) and **HOLD**, which latches a note so you can audition without MIDI.
 - **Load…** or drop a WAV onto the scope or strip.
+
+## Architecture
+
+- **Zero-dependency C DSP Core (`src/dsp/`)**: Polyphonic grain scheduler, Hann window generator, cubic/linear interpolation read heads, and per-voice ADSR envelopes written in standalone C with zero audio-thread heap allocations.
+- **Lock-Free Telemetry**: Audio-to-UI ring buffers stream real-time stereo output samples (goniometer phase scope) and active grain spawn coordinates (waveform source strip) without blocking `processBlock`.
+- **JUCE Wrapper (`src/plugin/`)**: Targets macOS Universal/arm64 (`AU`, `VST3`) and Windows (`VST3`).
 
 ## Download & Installation
 
@@ -94,7 +100,7 @@ motes_harness --snapshot out.png   # renders editor without a host
 
 ## Layout
 
-- `src/core/` — the DSP engine: portable C11 with no JUCE dependency, exposed through a small C ABI.
-- `src/plugin/` — the JUCE shell: processor, editor and components.
-- `assets/fonts/` — Barlow Condensed and IBM Plex Mono (SIL OFL; licenses alongside).
-- `docs/` — design notes, plans, and the editor's reference capture.
+- `src/core/`: the DSP engine: portable C11 with no JUCE dependency, exposed through a small C ABI.
+- `src/plugin/`: the JUCE shell: processor, editor and components.
+- `assets/fonts/`: Barlow Condensed and IBM Plex Mono (SIL OFL; licenses alongside).
+- `docs/`: design notes, plans, and the editor's reference capture.
