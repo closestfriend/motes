@@ -1,6 +1,6 @@
 ## Motes
 
-A polyphonic granular sample-as-synth for Ableton Live and other DAWs. Load a sample, play it from MIDI, and shape the grain cloud with 13 parameters. Available as **AU** (macOS) and **VST3** (macOS and Windows).
+A polyphonic granular sample-as-synth for Ableton Live and other DAWs. Load a sample, play it from MIDI, and shape the grain cloud with 13 parameters. Available as **AU** and **VST3** for macOS on Apple Silicon (arm64).
 
 ![The Motes editor](/motes-demo-recording.gif)
 
@@ -15,15 +15,13 @@ A polyphonic granular sample-as-synth for Ableton Live and other DAWs. Load a sa
 
 - **Zero-dependency C DSP Core (`src/core/`)**: Polyphonic grain scheduler, Hann window generator, cubic/linear interpolation read heads, and per-voice ADSR envelopes written in standalone C with zero audio-thread heap allocations.
 - **Lock-Free Telemetry**: Audio-to-UI ring buffers stream real-time stereo output samples (goniometer phase scope) and active grain spawn coordinates (waveform source strip) without blocking `processBlock`.
-- **JUCE Wrapper (`src/plugin/`)**: Targets macOS Universal/arm64 (`AU`, `VST3`) and Windows (`VST3`).
+- **JUCE Wrapper (`src/plugin/`)**: Builds `AU` and `VST3` for macOS on Apple Silicon (arm64).
 
 ## Download & Installation
 
 Pre-built binaries can be downloaded from [GitHub Releases](https://github.com/closestfriend/motes/releases).
 
-### macOS (AU & VST3)
-
-1. Download the latest `Motes-macOS.zip` from [Releases](https://github.com/closestfriend/motes/releases).
+1. Download `Motes-<version>-macOS.zip` from the [latest release](https://github.com/closestfriend/motes/releases/latest).
 2. Unzip and copy the plugins into your audio plug-ins folder:
    - **AU**: Copy `Motes.component` to `~/Library/Audio/Plug-Ins/Components/`
    - **VST3**: Copy `Motes.vst3` to `~/Library/Audio/Plug-Ins/VST3/`
@@ -39,24 +37,11 @@ Pre-built binaries can be downloaded from [GitHub Releases](https://github.com/c
    auval -v aumu Mote Hntr
    ```
 
-### Windows (VST3)
-
-> **Note**: Audio Unit (AU) is an Apple-only format. On Windows, DAWs (such as Ableton Live, FL Studio, and Reaper) use **VST3**.
-
-1. Download the latest `Motes-Windows.zip` from [Releases](https://github.com/closestfriend/motes/releases).
-2. Unzip and copy `Motes.vst3` to your standard VST3 directory:
-   ```
-   C:\Program Files\Common Files\VST3\
-   ```
-3. Open your DAW and rescan your VST3 plug-in folder.
-
 ---
 
 ## Build from Source
 
-### macOS
-
-Apple Silicon, CMake, and Command Line Tools (full Xcode is not required). JUCE is included as a submodule.
+Requires an Apple Silicon Mac, CMake, and the Command Line Tools (full Xcode is not required). JUCE is included as a submodule.
 
 ```bash
 git submodule update --init
@@ -67,18 +52,6 @@ cmake --build build
 A build automatically installs the AU and VST3 into `~/Library/Audio/Plug-Ins/`.
 
 `git status` will show ` m JUCE`. That is intentional: the JUCE submodule is pinned to upstream 7.0.12 and a small patch (`patches/`, a macOS 15 SDK fix) is applied at configure time. Don't commit it.
-
-### Windows
-
-CMake and Visual Studio 2022 (with the "Desktop development with C++" workload installed).
-
-```bash
-git submodule update --init
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-```
-
-`Motes.vst3` will be created in `build/Motes_artefacts/Release/VST3/` and copied to `C:\Program Files\Common Files\VST3\`.
 
 ---
 
