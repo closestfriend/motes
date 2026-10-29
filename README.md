@@ -13,7 +13,7 @@ A polyphonic granular sample-as-synth for Ableton Live and other DAWs. Load a sa
 
 ## Architecture
 
-- **Zero-dependency C DSP Core (`src/dsp/`)**: Polyphonic grain scheduler, Hann window generator, cubic/linear interpolation read heads, and per-voice ADSR envelopes written in standalone C with zero audio-thread heap allocations.
+- **Zero-dependency C DSP Core (`src/core/`)**: Polyphonic grain scheduler, Hann window generator, cubic/linear interpolation read heads, and per-voice ADSR envelopes written in standalone C with zero audio-thread heap allocations.
 - **Lock-Free Telemetry**: Audio-to-UI ring buffers stream real-time stereo output samples (goniometer phase scope) and active grain spawn coordinates (waveform source strip) without blocking `processBlock`.
 - **JUCE Wrapper (`src/plugin/`)**: Targets macOS Universal/arm64 (`AU`, `VST3`) and Windows (`VST3`).
 
@@ -100,7 +100,7 @@ motes_harness --snapshot out.png   # renders editor without a host
 
 ## Layout
 
-- `src/core/`: the DSP engine: portable C11 with no JUCE dependency, exposed through a small C ABI.
-- `src/plugin/`: the JUCE shell: processor, editor and components.
+- `src/core/`: the DSP engine, portable C11 with no JUCE dependency, exposed through a small C ABI.
+- `src/plugin/`: the JUCE shell (processor, editor and components).
 - `assets/fonts/`: Barlow Condensed and IBM Plex Mono (SIL OFL; licenses alongside).
 - `docs/`: design notes, plans, and the editor's reference capture.
