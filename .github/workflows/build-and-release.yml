@@ -2,7 +2,6 @@ name: Build & Release
 
 on:
   push:
-    branches: [ main ]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -47,42 +46,9 @@ jobs:
           path: Motes-macOS.zip
           retention-days: 14
 
-  build-windows:
-    name: Build Windows (VST3)
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Configure CMake
-        run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release -DMOTES_COPY_PLUGIN_AFTER_BUILD=OFF
-
-      - name: Build Motes (VST3)
-        run: cmake --build build --config Release --target Motes_VST3 test_core test_format
-
-      - name: Run Tests
-        run: ctest --test-dir build -C Release --output-on-failure
-
-      - name: Package Windows Artifacts
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path release-windows
-          Copy-Item -Recurse -Path build/Motes_artefacts/Release/VST3/Motes.vst3 -Destination release-windows/
-          Compress-Archive -Path release-windows/Motes.vst3 -DestinationPath Motes-Windows.zip
-
-      - name: Upload Windows Zip Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Motes-Windows
-          path: Motes-Windows.zip
-          retention-days: 14
-
   release:
     name: Publish Release
-    needs: [build-macos, build-windows]
+    needs: [build-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Download macOS Artifact
@@ -90,35 +56,9 @@ jobs:
         with:
           name: Motes-macOS
 
-      - name: Download Windows Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Motes-Windows
-
       - name: Publish Tagged Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            Motes-macOS.zip
-            Motes-Windows.zip
+          files: Motes-macOS.zip
           generate_release_notes: true
-
-      - name: Publish or Update Latest Pre-Release
-        if: "!startsWith(github.ref, 'refs/tags/v')"
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          target_commitish: ${{ github.sha }}
-          name: "Motes (Latest Build)"
-          body: |
-            Automatic build from commit `${{ github.sha }}`.
-
-            - **macOS**: `Motes-macOS.zip` (AU + VST3)
-            - **Windows**: `Motes-Windows.zip` (VST3)
-
-            See [README.md](https://github.com/closestfriend/motes#download--installation) for installation and macOS Gatekeeper instructions.
-          prerelease: true
-          files: |
-            Motes-macOS.zip
-            Motes-Windows.zip
